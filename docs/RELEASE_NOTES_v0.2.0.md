@@ -4,11 +4,11 @@ The first public beta of a machine-discoverable x402 storefront powered by Venic
 
 ## Included workers
 
-- Structured data extraction — 0.01 USDC
+- Structured data extraction — 0.020 USDC
 - Text classification — 0.005 USDC
-- Compact summarization — 0.01 USDC
-- Speech generation — 0.02 USDC
-- Image generation — 0.03 USDC
+- Compact summarization — 0.005 USDC
+- Speech generation — 0.010 USDC
+- Image generation — 0.020 USDC
 - Audio transcription — 0.015 USDC
 
 ## Agent discovery
