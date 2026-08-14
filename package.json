@@ -1,8 +1,9 @@
 {
   "name": "diem-agent-workers",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.19.0",
   "description": "Machine-discoverable micro-workers powered by Venice compute, paid in USDC, with a DIEM-only reinvestment treasury.",
   "homepage": "https://diem-agent-workers.vercel.app",
   "repository": {
@@ -29,13 +30,14 @@
     "wallet:import": "tsx scripts/import-treasury-wallet.ts",
     "wallet:verify": "tsx scripts/verify-treasury-wallet.ts",
     "treasury:run": "tsx src/treasury/run.ts",
-    "generate:openapi": "tsx scripts/generate-openapi.ts"
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
+    "telemetry:report": "tsx scripts/summarize-telemetry.ts"
   },
   "bin": {
     "diem-agent-workers-mcp": "dist/src/mcp-cli.js"
   },
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",

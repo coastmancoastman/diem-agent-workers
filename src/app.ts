@@ -33,6 +33,19 @@ import {
 import { capacityMiddleware, VeniceReadiness } from "./readiness.js";
 import { a2aInternalError, a2aSuccess, parseA2ARequest, type A2AJob } from "./a2a.js";
 import { handleMcpRequest } from "./mcp.js";
+import {
+  JsonConsoleTelemetry,
+  NoopTelemetry,
+  classifySurface,
+  emitTelemetry,
+  type TelemetryErrorClass,
+  type TelemetrySink,
+} from "./telemetry.js";
+import {
+  VeniceCatalogCostEstimator,
+  type CostEstimateInput,
+  type CostEstimator,
+} from "./costs.js";
 
 export type Extractor = typeof extractJsonWithVenice;
 
@@ -44,6 +57,8 @@ export interface AppDependencies {
   imageGenerator?: typeof generateDraftImageWithVenice;
   transcriber?: typeof transcribeAudioWithVenice;
   readiness?: VeniceReadiness;
+  telemetry?: TelemetrySink;
+  costEstimator?: CostEstimator;
 }
 
 // Helmet publishes a callable ESM default, but some NodeNext build hosts
@@ -62,6 +77,133 @@ export async function buildApp(
   const speaker = dependencies.speaker ?? textToSpeechWithVenice;
   const imageGenerator = dependencies.imageGenerator ?? generateDraftImageWithVenice;
   const transcriber = dependencies.transcriber ?? transcribeAudioWithVenice;
+  const telemetry =
+    dependencies.telemetry ??
+    (config.appEnv === "test" ? new NoopTelemetry() : new JsonConsoleTelemetry());
+  const costEstimator =
+    dependencies.costEstimator ?? new VeniceCatalogCostEstimator(config);
+  try {
+    costEstimator.warm?.();
+  } catch {
+    // Pricing metadata is best-effort and never gates a worker.
+  }
+  const workerPrices = new Map<WorkerId, number>([
+    [WORKERS.extractJson.id, config.x402PriceUsd],
+    [WORKERS.classifyText.id, config.x402ClassifyPriceUsd],
+    [WORKERS.summarizeText.id, config.x402SummarizePriceUsd],
+    [WORKERS.textToSpeech.id, config.x402TtsPriceUsd],
+    [WORKERS.generateDraftImage.id, config.x402ImagePriceUsd],
+    [WORKERS.transcribeAudio.id, config.x402TranscribePriceUsd],
+  ]);
+
+  const telemetryErrorClass = (error: unknown): TelemetryErrorClass => {
+    if (error instanceof InputError) return "invalid_request";
+    if (error instanceof SyntaxError) return "invalid_json";
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      error.status === 413
+    ) {
+      return "payload_too_large";
+    }
+    if (error instanceof ProviderError) {
+      if (error.status === 504) return "provider_timeout";
+      if (error.status >= 500) return "provider_unavailable";
+      return "provider_rejected";
+    }
+    return "internal_error";
+  };
+
+  const costInput = (
+    worker: WorkerId,
+    input: unknown,
+    result: unknown,
+  ): CostEstimateInput => {
+    const resultRecord = result as {
+      provider?: { model?: unknown };
+      usage?: {
+        inputTokens?: unknown;
+        outputTokens?: unknown;
+        totalTokens?: unknown;
+      };
+    };
+    const inputRecord = input as {
+      text?: unknown;
+      durationSeconds?: unknown;
+    };
+    const numeric = (value: unknown): number | undefined =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0
+        ? value
+        : undefined;
+    const model =
+      typeof resultRecord.provider?.model === "string"
+        ? resultRecord.provider.model
+        : worker === WORKERS.textToSpeech.id
+          ? config.veniceTtsModel
+          : worker === WORKERS.generateDraftImage.id
+            ? config.veniceImageModel
+            : worker === WORKERS.transcribeAudio.id
+              ? config.veniceAsrModel
+              : config.veniceModel;
+    const inputTokens = numeric(resultRecord.usage?.inputTokens);
+    const outputTokens = numeric(resultRecord.usage?.outputTokens);
+    const totalTokens = numeric(resultRecord.usage?.totalTokens);
+    return {
+      worker,
+      model,
+      ...(inputTokens !== undefined ? { inputTokens } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
+      ...(totalTokens !== undefined ? { totalTokens } : {}),
+      ...(worker === WORKERS.textToSpeech.id && typeof inputRecord.text === "string"
+        ? { inputCharacters: inputRecord.text.length }
+        : {}),
+      ...(worker === WORKERS.transcribeAudio.id
+        ? { audioSeconds: numeric(inputRecord.durationSeconds) ?? 0 }
+        : {}),
+    };
+  };
+
+  const runWorker = async <T>(
+    worker: WorkerId,
+    input: unknown,
+    invoke: () => Promise<T>,
+  ): Promise<T> => {
+    const startedAt = Date.now();
+    try {
+      const result = await invoke();
+      const metrics = costInput(worker, input, result);
+      let estimatedDiemCost: number | undefined;
+      try {
+        estimatedDiemCost = costEstimator.estimate(metrics);
+      } catch {
+        estimatedDiemCost = undefined;
+      }
+      const priceUsd = workerPrices.get(worker) ?? 0;
+      emitTelemetry(telemetry, {
+        event: "worker_completed",
+        worker,
+        model: metrics.model,
+        durationMs: Date.now() - startedAt,
+        priceUsd,
+        ...(estimatedDiemCost !== undefined
+          ? {
+              estimatedDiemCost,
+              estimatedGrossMarginUsd: priceUsd - estimatedDiemCost,
+            }
+          : {}),
+      });
+      return result;
+    } catch (error) {
+      emitTelemetry(telemetry, {
+        event: "worker_failed",
+        worker,
+        durationMs: Date.now() - startedAt,
+        errorClass: telemetryErrorClass(error),
+      });
+      throw error;
+    }
+  };
 
   // Vercel terminates TLS before invoking Express. Trust exactly that proxy
   // hop so x402 advertises the public HTTPS resource instead of an internal
@@ -74,6 +216,28 @@ export async function buildApp(
       crossOriginResourcePolicy: { policy: "same-site" },
     }),
   );
+  app.use((req, res, next) => {
+    const startedAt = Date.now();
+    const classified = classifySurface(req.path);
+    res.on("finish", () => {
+      const method = req.method === "GET" || req.method === "POST"
+        ? req.method
+        : "OTHER";
+      emitTelemetry(telemetry, {
+        event: "request_completed",
+        surface: classified.surface,
+        method,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        paymentsMode: config.paymentsMode,
+        ...(classified.worker ? { worker: classified.worker } : {}),
+        ...(res.locals.telemetryErrorClass
+          ? { errorClass: res.locals.telemetryErrorClass as TelemetryErrorClass }
+          : {}),
+      });
+    });
+    next();
+  });
   app.use(
     rateLimit({
       windowMs: 60_000,
@@ -165,7 +329,7 @@ export async function buildApp(
   if (config.paymentsMode !== "off") {
     app.use(capacityMiddleware(dependencies.readiness ?? new VeniceReadiness(config)));
   }
-  await attachPaymentMiddleware(app, config);
+  await attachPaymentMiddleware(app, config, telemetry);
 
   app.get("/", (_req, res) => {
     res.json({
@@ -206,14 +370,6 @@ export async function buildApp(
   app.all("/mcp", (req, res) => {
     void handleMcpRequest(config, req, res);
   });
-  const workerPrices = new Map<WorkerId, number>([
-    [WORKERS.extractJson.id, config.x402PriceUsd],
-    [WORKERS.classifyText.id, config.x402ClassifyPriceUsd],
-    [WORKERS.summarizeText.id, config.x402SummarizePriceUsd],
-    [WORKERS.textToSpeech.id, config.x402TtsPriceUsd],
-    [WORKERS.generateDraftImage.id, config.x402ImagePriceUsd],
-    [WORKERS.transcribeAudio.id, config.x402TranscribePriceUsd],
-  ]);
   const sendQuote = (workerId: WorkerId, res: Response) => {
     const worker = Object.values(WORKERS).find((item) => item.id === workerId);
     const price = workerPrices.get(workerId);
@@ -250,7 +406,9 @@ export async function buildApp(
 
   app.post(WORKER_PATH, async (req, res, next) => {
     try {
-      const result = await extractor(res.locals.input, config);
+      const result = await runWorker(WORKERS.extractJson.id, res.locals.input, () =>
+        extractor(res.locals.input, config),
+      );
       res.json(result);
     } catch (error) {
       next(error);
@@ -258,35 +416,55 @@ export async function buildApp(
   });
   app.post(WORKERS.classifyText.path, async (_req, res, next) => {
     try {
-      res.json(await classifier(res.locals.input, config));
+      res.json(
+        await runWorker(WORKERS.classifyText.id, res.locals.input, () =>
+          classifier(res.locals.input, config),
+        ),
+      );
     } catch (error) {
       next(error);
     }
   });
   app.post(WORKERS.summarizeText.path, async (_req, res, next) => {
     try {
-      res.json(await summarizer(res.locals.input, config));
+      res.json(
+        await runWorker(WORKERS.summarizeText.id, res.locals.input, () =>
+          summarizer(res.locals.input, config),
+        ),
+      );
     } catch (error) {
       next(error);
     }
   });
   app.post(WORKERS.textToSpeech.path, async (_req, res, next) => {
     try {
-      res.json(await speaker(res.locals.input, config));
+      res.json(
+        await runWorker(WORKERS.textToSpeech.id, res.locals.input, () =>
+          speaker(res.locals.input, config),
+        ),
+      );
     } catch (error) {
       next(error);
     }
   });
   app.post(WORKERS.generateDraftImage.path, async (_req, res, next) => {
     try {
-      res.json(await imageGenerator(res.locals.input, config));
+      res.json(
+        await runWorker(WORKERS.generateDraftImage.id, res.locals.input, () =>
+          imageGenerator(res.locals.input, config),
+        ),
+      );
     } catch (error) {
       next(error);
     }
   });
   app.post(WORKERS.transcribeAudio.path, async (_req, res, next) => {
     try {
-      res.json(await transcriber(res.locals.input, config));
+      res.json(
+        await runWorker(WORKERS.transcribeAudio.id, res.locals.input, () =>
+          transcriber(res.locals.input, config),
+        ),
+      );
     } catch (error) {
       next(error);
     }
@@ -297,23 +475,34 @@ export async function buildApp(
       let result: unknown;
       switch (job.workerId) {
         case WORKERS.extractJson.id:
-          result = await extractor(job.input as Parameters<typeof extractor>[0], config);
+          result = await runWorker(job.workerId, job.input, () =>
+            extractor(job.input as Parameters<typeof extractor>[0], config),
+          );
           break;
         case WORKERS.classifyText.id:
-          result = await classifier(job.input as Parameters<typeof classifier>[0], config);
+          result = await runWorker(job.workerId, job.input, () =>
+            classifier(job.input as Parameters<typeof classifier>[0], config),
+          );
           break;
         case WORKERS.summarizeText.id:
-          result = await summarizer(job.input as Parameters<typeof summarizer>[0], config);
+          result = await runWorker(job.workerId, job.input, () =>
+            summarizer(job.input as Parameters<typeof summarizer>[0], config),
+          );
           break;
         case WORKERS.textToSpeech.id:
-          result = await speaker(job.input as Parameters<typeof speaker>[0], config);
+          result = await runWorker(job.workerId, job.input, () =>
+            speaker(job.input as Parameters<typeof speaker>[0], config),
+          );
           break;
         case WORKERS.generateDraftImage.id:
-          result = await imageGenerator(job.input as Parameters<typeof imageGenerator>[0], config);
+          result = await runWorker(job.workerId, job.input, () =>
+            imageGenerator(job.input as Parameters<typeof imageGenerator>[0], config),
+          );
           break;
       }
       res.json(a2aSuccess(job, result));
     } catch {
+      res.locals.telemetryErrorClass = "provider_unavailable";
       res.status(503).json(a2aInternalError(job));
     }
   });
@@ -321,6 +510,7 @@ export async function buildApp(
   app.use((_req, res) => res.status(404).json({ error: "not_found" }));
   app.use(
     (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+      res.locals.telemetryErrorClass = telemetryErrorClass(error);
       if (error instanceof InputError) {
         res.status(400).json({ error: "invalid_request", message: error.message });
         return;
@@ -342,7 +532,6 @@ export async function buildApp(
         res.status(413).json({ error: "payload_too_large" });
         return;
       }
-      console.error(JSON.stringify({ event: "request_failed", error: String(error) }));
       res.status(500).json({ error: "internal_error" });
     },
   );

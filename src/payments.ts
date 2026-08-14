@@ -9,13 +9,45 @@ import {
   BASE_CAIP2,
   BASE_SEPOLIA_CAIP2,
   WORKERS,
+  type WorkerId,
 } from "./constants.js";
 import type { AppConfig } from "./config.js";
 import { workerContracts, workerPrice } from "./discovery.js";
+import {
+  emitTelemetry,
+  workerForPath,
+  type TelemetrySink,
+} from "./telemetry.js";
+
+function paymentTelemetryContext(
+  config: AppConfig,
+  transportContext: unknown,
+):
+  | { surface: "worker"; worker: WorkerId; priceUsd: number }
+  | { surface: "a2a"; priceUsd: number }
+  | undefined {
+  const path = (
+    transportContext as { request?: { path?: unknown } } | undefined
+  )?.request?.path;
+  if (typeof path !== "string") return undefined;
+  const worker = workerForPath(path);
+  if (worker) {
+    return {
+      surface: "worker",
+      worker,
+      priceUsd: workerPrice(config, worker),
+    };
+  }
+  if (path === "/a2a") {
+    return { surface: "a2a", priceUsd: config.x402PriceUsd };
+  }
+  return undefined;
+}
 
 export async function attachPaymentMiddleware(
   app: Express,
   config: AppConfig,
+  telemetry: TelemetrySink,
 ): Promise<void> {
   if (config.paymentsMode === "off") return;
   if (!config.treasuryAddress) {
@@ -71,15 +103,29 @@ export async function attachPaymentMiddleware(
     routes,
   });
 
-  server.resourceServer.onAfterSettle(async ({ result }) => {
-    // Deliberately omit payer and request content from logs.
-    console.info(
-      JSON.stringify({
-        event: "x402_payment_settled",
-        network: result.network,
-        transaction: result.transaction,
-      }),
-    );
+  server.resourceServer.onAfterSettle(async ({ result, phase, transportContext }) => {
+    if (phase === "cancel") return;
+    const context = paymentTelemetryContext(config, transportContext);
+    if (!context) return;
+    emitTelemetry(telemetry, {
+      event: "x402_payment_settled",
+      surface: context.surface,
+      network: result.network,
+      phase,
+      priceUsd: context.priceUsd,
+      ...(context.surface === "worker" ? { worker: context.worker } : {}),
+    });
+  });
+  server.resourceServer.onSettleFailure(async ({ phase, transportContext }) => {
+    if (phase === "cancel") return;
+    const context = paymentTelemetryContext(config, transportContext);
+    if (!context) return;
+    emitTelemetry(telemetry, {
+      event: "x402_payment_failed",
+      surface: context.surface,
+      phase,
+      ...(context.surface === "worker" ? { worker: context.worker } : {}),
+    });
   });
   // The CDP class extends this exact x402 server at runtime. Its published
   // declarations currently resolve the private base field through a separate

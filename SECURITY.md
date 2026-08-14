@@ -14,6 +14,8 @@ Do not make the buy token, chain, transaction target, or acknowledgement configu
 
 Source text is untrusted data. It is bounded, placed inside explicit delimiters, and sent with web search, scraping, X search, and tool use disabled. Media inputs are bounded; transcription accepts only locally parsed PCM WAV data of at most 60 seconds. The service does not intentionally persist request bodies. Avoid logging bodies, payment identities, or provider error bodies.
 
+Operational telemetry is rebuilt from an explicit field allowlist. Never add prompts, outputs, raw paths, prompt lengths, token counts, request IDs, network addresses, headers, user agents, payer identities, transaction hashes, provider request IDs, balances, or billing-history records. Aggregate cost estimates may use the public model-pricing catalog, but telemetry must remain non-blocking and must not weaken a worker response when pricing is unavailable.
+
 ## Payment boundary
 
 Every paid route parses and validates its request before x402 middleware. When payments are enabled, the route also verifies current Venice epoch access and that the exact configured model is online, private, and capability-compatible before returning payment instructions. Successful readiness is cached for at most 15 seconds and concurrent refreshes are coalesced.
