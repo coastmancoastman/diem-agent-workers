@@ -39,6 +39,7 @@ import {
   classifySurface,
   emitTelemetry,
   type TelemetryErrorClass,
+  type TelemetryEvent,
   type TelemetrySink,
 } from "./telemetry.js";
 import {
@@ -167,6 +168,7 @@ export async function buildApp(
   const runWorker = async <T>(
     worker: WorkerId,
     input: unknown,
+    res: Response,
     invoke: () => Promise<T>,
   ): Promise<T> => {
     const startedAt = Date.now();
@@ -180,7 +182,7 @@ export async function buildApp(
         estimatedDiemCost = undefined;
       }
       const priceUsd = workerPrices.get(worker) ?? 0;
-      emitTelemetry(telemetry, {
+      const workerEvent: TelemetryEvent = {
         event: "worker_completed",
         worker,
         model: metrics.model,
@@ -192,15 +194,17 @@ export async function buildApp(
               estimatedGrossMarginUsd: priceUsd - estimatedDiemCost,
             }
           : {}),
-      });
+      };
+      res.locals.telemetryWorkerEvent = workerEvent;
       return result;
     } catch (error) {
-      emitTelemetry(telemetry, {
+      const workerEvent: TelemetryEvent = {
         event: "worker_failed",
         worker,
         durationMs: Date.now() - startedAt,
         errorClass: telemetryErrorClass(error),
-      });
+      };
+      res.locals.telemetryWorkerEvent = workerEvent;
       throw error;
     }
   };
@@ -220,6 +224,15 @@ export async function buildApp(
     const startedAt = Date.now();
     const classified = classifySurface(req.path);
     res.on("finish", () => {
+      const workerEvent = res.locals.telemetryWorkerEvent as
+        | TelemetryEvent
+        | undefined;
+      if (
+        workerEvent?.event === "worker_completed" ||
+        workerEvent?.event === "worker_failed"
+      ) {
+        emitTelemetry(telemetry, workerEvent);
+      }
       const method = req.method === "GET" || req.method === "POST"
         ? req.method
         : "OTHER";
@@ -406,7 +419,7 @@ export async function buildApp(
 
   app.post(WORKER_PATH, async (req, res, next) => {
     try {
-      const result = await runWorker(WORKERS.extractJson.id, res.locals.input, () =>
+      const result = await runWorker(WORKERS.extractJson.id, res.locals.input, res, () =>
         extractor(res.locals.input, config),
       );
       res.json(result);
@@ -417,7 +430,7 @@ export async function buildApp(
   app.post(WORKERS.classifyText.path, async (_req, res, next) => {
     try {
       res.json(
-        await runWorker(WORKERS.classifyText.id, res.locals.input, () =>
+        await runWorker(WORKERS.classifyText.id, res.locals.input, res, () =>
           classifier(res.locals.input, config),
         ),
       );
@@ -428,7 +441,7 @@ export async function buildApp(
   app.post(WORKERS.summarizeText.path, async (_req, res, next) => {
     try {
       res.json(
-        await runWorker(WORKERS.summarizeText.id, res.locals.input, () =>
+        await runWorker(WORKERS.summarizeText.id, res.locals.input, res, () =>
           summarizer(res.locals.input, config),
         ),
       );
@@ -439,7 +452,7 @@ export async function buildApp(
   app.post(WORKERS.textToSpeech.path, async (_req, res, next) => {
     try {
       res.json(
-        await runWorker(WORKERS.textToSpeech.id, res.locals.input, () =>
+        await runWorker(WORKERS.textToSpeech.id, res.locals.input, res, () =>
           speaker(res.locals.input, config),
         ),
       );
@@ -450,7 +463,7 @@ export async function buildApp(
   app.post(WORKERS.generateDraftImage.path, async (_req, res, next) => {
     try {
       res.json(
-        await runWorker(WORKERS.generateDraftImage.id, res.locals.input, () =>
+        await runWorker(WORKERS.generateDraftImage.id, res.locals.input, res, () =>
           imageGenerator(res.locals.input, config),
         ),
       );
@@ -461,7 +474,7 @@ export async function buildApp(
   app.post(WORKERS.transcribeAudio.path, async (_req, res, next) => {
     try {
       res.json(
-        await runWorker(WORKERS.transcribeAudio.id, res.locals.input, () =>
+        await runWorker(WORKERS.transcribeAudio.id, res.locals.input, res, () =>
           transcriber(res.locals.input, config),
         ),
       );
@@ -475,27 +488,27 @@ export async function buildApp(
       let result: unknown;
       switch (job.workerId) {
         case WORKERS.extractJson.id:
-          result = await runWorker(job.workerId, job.input, () =>
+          result = await runWorker(job.workerId, job.input, res, () =>
             extractor(job.input as Parameters<typeof extractor>[0], config),
           );
           break;
         case WORKERS.classifyText.id:
-          result = await runWorker(job.workerId, job.input, () =>
+          result = await runWorker(job.workerId, job.input, res, () =>
             classifier(job.input as Parameters<typeof classifier>[0], config),
           );
           break;
         case WORKERS.summarizeText.id:
-          result = await runWorker(job.workerId, job.input, () =>
+          result = await runWorker(job.workerId, job.input, res, () =>
             summarizer(job.input as Parameters<typeof summarizer>[0], config),
           );
           break;
         case WORKERS.textToSpeech.id:
-          result = await runWorker(job.workerId, job.input, () =>
+          result = await runWorker(job.workerId, job.input, res, () =>
             speaker(job.input as Parameters<typeof speaker>[0], config),
           );
           break;
         case WORKERS.generateDraftImage.id:
-          result = await runWorker(job.workerId, job.input, () =>
+          result = await runWorker(job.workerId, job.input, res, () =>
             imageGenerator(job.input as Parameters<typeof imageGenerator>[0], config),
           );
           break;

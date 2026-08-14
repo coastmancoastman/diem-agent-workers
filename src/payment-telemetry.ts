@@ -108,10 +108,9 @@ export function paymentResponseTelemetryMiddleware(
           { event: "x402_payment_settled" | "x402_payment_failed" }
         >
       | undefined;
-    // The storefront's request_completed listener was registered earlier, so
-    // this listener runs afterward and leaves the payment result as the final
-    // structured line for hosts that retain one log message per invocation.
-    res.once("finish", () => {
+    // Run before the storefront's worker/request finish listeners so hosts
+    // that retain one application log keep the authoritative payment result.
+    res.prependOnceListener("finish", () => {
       if (settlementEvent) emitTelemetry(telemetry, settlementEvent);
     });
     res.setHeader = function setHeaderWithSettlementTelemetry(name, value) {
