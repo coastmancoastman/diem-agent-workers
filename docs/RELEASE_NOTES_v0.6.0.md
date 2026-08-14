@@ -22,8 +22,8 @@ Production payments now require `AGGREGATE_METRICS_MODE=enabled`. The checked-in
 
 ## Safety posture
 
-- Keeps input validation, Venice capacity checks, the 0.25 DIEM daily software budget, and delivery credits ahead of inference or settlement.
-- Keeps the Vercel treasury runtime disabled and signer-free.
+- Keeps input validation, Venice capacity checks, the conservative software budget, and delivery credits ahead of inference or settlement.
+- Keeps operator asset management outside the Vercel runtime and signer-free.
 - Keeps prompts and outputs out of application logs and durable storage.
 
 ## Acceptance target

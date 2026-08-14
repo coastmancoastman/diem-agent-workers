@@ -15,7 +15,7 @@ Public beta: [diem-agent-workers.vercel.app](https://diem-agent-workers.vercel.a
 | `generate_draft_image` | One safe-mode 1024px WebP | $0.020 USDC |
 | `transcribe_audio` | Up to 60 seconds of verified PCM WAV | $0.015 USDC |
 
-These are fixed prices per successful authorization attempt, not estimates. The public deployment is a low-cap Base mainnet beta: an atomic 0.25 DIEM software budget limits daily inference starts, while the Venice API key retains a separate 1.69 DIEM provider backstop.
+These are fixed prices per successful authorization attempt, not estimates. The public deployment uses conservative, fail-closed provider-capacity limits.
 
 ## Privacy by design
 
@@ -25,14 +25,13 @@ These are fixed prices per successful authorization attempt, not estimates. The 
 - Workers use private Venice models, with web search, scraping, and model tool use disabled.
 - Delivery protection stores only HMAC fingerprints and bounded state needed to redeem an interrupted delivery.
 
-The optional USDC-to-DIEM treasury remains disabled in production and is not part of the storefront runtime. No wallet signer or private key is deployed to Vercel.
+The public storefront has no operator wallet signer or private key deployed to Vercel and does not perform automated asset conversion.
 
 ## What is implemented
 
 - Three Venice structured-output text workers with post-response JSON Schema validation
 - Bounded Venice speech, image, and transcription workers
-- Native Venice API-key compute ceiling of 1.69 DIEM per EPOCH (daily, resetting at 00:00 UTC)
-- Atomic Upstash-backed software ceiling of 0.25 DIEM of conservatively reserved work per UTC day
+- Independent provider-side and atomic software capacity ceilings
 - An environment-backed storefront kill switch checked before payment
 - Input validation before payment, including exact PCM WAV duration checks
 - Pre-payment Venice epoch-access, model-online, private-model, and capability checks
@@ -44,10 +43,7 @@ The optional USDC-to-DIEM treasury remains disabled in production and is not par
 - Privacy-preserving runtime telemetry plus durable lifetime aggregate reliability, settlement, revenue, latency-bucket, and DIEM counters
 - Durable, idempotent paid-delivery credits backed by atomic Upstash Redis state
 - Published machine-readable terms linked from every response and discovery surface
-- Payments sent directly to a dedicated treasury address
-- Quote-only and live USDC-to-DIEM treasury modes
-- Hard-coded Base USDC, Venice DIEM, chain ID, and 0x AllowanceHolder
-- Exact approvals, per-swap limits, slippage cap, ETH gas reserve, process lock, and owner-only audit log
+- Payments sent directly to the configured Base settlement address
 - Installable agent skill and local/stdio MCP adapter
 
 The service is not affiliated with or endorsed by Venice.ai.
@@ -71,10 +67,9 @@ VENICE_TEXT_MODEL=venice-uncensored-1-2
 VENICE_IMAGE_MODEL=venice-sd35
 VENICE_TTS_MODEL=tts-kokoro
 VENICE_ASR_MODEL=openai/whisper-large-v3
-VENICE_DIEM_EPOCH_CAP=1.69
 ```
 
-`VENICE_DIEM_EPOCH_CAP` publishes the cap in service discovery and must match the native `EPOCH` consumption limit configured on the Venice API key. Venice enforces the hard stop. Before issuing a 402, the service also checks current epoch access and the exact configured model's online/private/capability state; it never estimates DIEM billing from token counts.
+Configure a native Venice `EPOCH` limit for the server key. Before issuing a 402, the service checks current epoch access and the configured model's online, private, and capability state.
 
 The development server binds to `127.0.0.1:8402`.
 
@@ -104,7 +99,7 @@ curl -X POST http://127.0.0.1:8402/v1/jobs/extract-json \
   }'
 ```
 
-Production refuses to start unless `PAYMENTS_MODE=production`, durable delivery credits are enforced, the global compute budget is enforced, and aggregate-only metrics are enabled. The checked-in and local defaults remain `PAYMENTS_MODE=off`, `STOREFRONT_ENABLED=false`, `AGGREGATE_METRICS_MODE=off`, and `TREASURY_MODE=disabled`.
+Production refuses to start unless payments, durable delivery protection, the global compute budget, and aggregate-only metrics are configured consistently. Checked-in and local defaults keep payment and operator-only functionality disabled.
 
 ## Add x402 payments
 
@@ -130,16 +125,8 @@ The server uses the address form of the CDP configuration, so payments settle di
 ### Paid-delivery protection
 
 Mainnet is fail-closed unless durable delivery credits are enforced. Provision an
-Upstash Redis database through the Vercel Marketplace, then configure:
-
-```dotenv
-DELIVERY_CREDITS_MODE=enforced
-DELIVERY_CREDIT_HMAC_SECRET=<at-least-32-random-bytes>
-DELIVERY_CREDIT_TTL_SECONDS=86400
-DELIVERY_CREDIT_LEASE_SECONDS=180
-UPSTASH_REDIS_REST_URL=...
-UPSTASH_REDIS_REST_TOKEN=...
-```
+Upstash Redis database through the Vercel Marketplace and use the checked-in
+environment template for the required settings.
 
 Agents should generate one unpredictable `Idempotency-Key` per logical job and
 reuse it only with the identical request and payment authorization. Signed paid
@@ -154,14 +141,8 @@ rejected, and storage outages return `503` before settlement.
 
 ### Mainnet compute budget and kill switch
 
-Production also requires an atomic global compute budget:
-
-```dotenv
-COMPUTE_BUDGET_MODE=enforced
-COMPUTE_BUDGET_DIEM_PER_DAY=0.25
-AGGREGATE_METRICS_MODE=enabled
-STOREFRONT_ENABLED=true
-```
+Production also requires a reviewed atomic global compute budget and an
+independent storefront kill switch.
 
 The service reserves a conservative amount equal to the job's USDC price after x402 verification but before Venice inference. Delivery retries reserve again because they can consume provider capacity even when the buyer is not charged again. A Redis outage or exhausted budget aborts new payment settlement and blocks inference. Set `STOREFRONT_ENABLED=false` and redeploy to disable all paid work before payment.
 
@@ -174,86 +155,24 @@ pnpm test:sepolia
 This is an actual testnet transaction: it creates an ephemeral in-memory buyer,
 requests faucet USDC, validates the exact quote before signing, pays one worker
 call, and reconciles the treasury's test-USDC increase. It refuses to run unless
-the saved `PAYMENTS_MODE` is `off` and `TREASURY_MODE` is `disabled`. Local HTTP
+the saved payment and operator-only modes are disabled. Local HTTP
 tests are not published to Bazaar; a public HTTPS deployment is required.
 
 Mainnet launch checklist:
 
-1. Use a dedicated, low-balance treasury wallet—not a personal wallet.
+1. Use a dedicated, low-balance settlement account—not a personal wallet.
 2. Verify the address and Base network.
 3. Deploy behind public HTTPS.
 4. Validate the x402 endpoint with the CDP validation API.
 5. Publish and review [TERMS.md](TERMS.md); every API response links to `/terms`.
-6. Enable durable delivery credits and the 0.25 DIEM atomic software budget.
-7. Set `PAYMENTS_MODE=production`, keep `TREASURY_MODE=disabled`, and deploy.
+6. Enable durable delivery credits and a conservative atomic software budget.
+7. Enable production payments while keeping operator-only asset management disabled.
 8. Complete one real low-value payment so Bazaar can index the Base mainnet resource.
 
-The mainnet acceptance harness uses a distinct cents-only buyer kept in macOS Keychain, verifies every payment requirement before signing, and refuses a combined storefront authorization above $0.095 USDC. Select individual workers with `MAINNET_X402_TEST_WORKERS` or use `pnpm test:mainnet:all`; multi-worker runs require the exact acknowledgement `PAY_UP_TO_0_095_USDC_WITH_DISTINCT_BUYER_ON_BASE`. Its output deliberately omits wallet addresses, transaction hashes, request bodies, and provider responses.
-
-## Reinvest USDC into DIEM
-
-The treasury is a deterministic one-shot runner, not a prompt-driven wallet agent.
-
-Create a new dedicated wallet on macOS with:
-
-```bash
-pnpm wallet:create
-```
-
-The command stores the private key in macOS Keychain and writes only the public address and Keychain labels to `.env`. It refuses to replace an existing wallet and requires payments and treasury execution to be disabled.
-
-For seed-phrase recovery, create a dedicated wallet in a trusted wallet app, keep its seed phrase offline, export only its treasury account private key, and import that key through a hidden local prompt:
-
-```bash
-pnpm wallet:import
-```
-
-Never enter the seed phrase into the project. The import command displays the derived public address for confirmation, stores the account key in macOS Keychain, and replaces the previous disabled treasury configuration only after Keychain readback succeeds.
-
-Verify ownership and read Base balances without revealing the key:
-
-```bash
-pnpm wallet:verify
-```
-
-See [docs/WALLET_ACCESS.md](docs/WALLET_ACCESS.md) for the macOS-authenticated recovery and wallet-import path. Never send a private key through chat; if you already control a wallet, share only its public `0x` address.
-
-Quote-only mode reads balances and requests an indicative 0x price, but never signs:
-
-```dotenv
-TREASURY_MODE=quote
-TREASURY_ADDRESS=0xYourDedicatedEvmAddress
-BASE_RPC_URL=https://your-base-rpc.example
-ZEROX_API_KEY=...
-TREASURY_MIN_SWAP_USDC=5
-TREASURY_MAX_SWAP_USDC=25
-TREASURY_USDC_HOLDBACK=0
-TREASURY_MAX_SLIPPAGE_BPS=100
-TREASURY_MIN_ETH_RESERVE=0.0005
-```
-
-```bash
-pnpm treasury:run
-```
-
-Live mode additionally requires the matching dedicated key from macOS Keychain (or a production secret manager) and an exact acknowledgement:
-
-```dotenv
-TREASURY_MODE=live
-TREASURY_LIVE_ACK=BUY_DIEM_ONLY_ON_BASE
-```
-
-Use a production secret manager rather than a plaintext `.env` when deployed. The live runner:
-
-- Refuses a key that does not match `TREASURY_ADDRESS`
-- Refuses the wrong token pair, chain, allowance target, native value, or excess gas
-- Approves only the intended USDC amount
-- Refreshes the firm quote after approval
-- Records the signed transaction hash before broadcast and reconciles it after a restart
-- Verifies that USDC decreased by no more than the authorized amount and DIEM increased
-- Writes `0600` JSONL audit records under `data/`
-
-The runner does not sell DIEM, withdraw USDC, bridge assets, select arbitrary tokens, or stake DIEM.
+Maintainer-only mainnet acceptance tooling is fail-closed, spending-bounded, and
+omits wallet addresses, transaction hashes, request bodies, and provider
+responses from its output. Production operator procedures are maintained
+separately and are not part of this public interface.
 
 ## Machine discovery
 

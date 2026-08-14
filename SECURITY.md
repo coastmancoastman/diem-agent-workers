@@ -2,13 +2,11 @@
 
 ## Secrets
 
-Never commit `.env`, Venice keys, CDP secrets, 0x keys, wallet private keys, or seed phrases. Use a dedicated treasury wallet with narrowly bounded funds. Local wallet setup stores its key in macOS Keychain; production deployments should inject secrets from a managed secret store.
+Never commit `.env`, provider credentials, payment credentials, wallet private keys, or seed phrases. Operator wallet credentials and recovery procedures belong in private, managed storage—not source control, public documentation, issues, or support conversations. No operator signer is deployed with the public storefront.
 
-## Treasury invariants
+## Operator asset management
 
-The treasury may only sell Base USDC for the hard-coded Venice DIEM token through the hard-coded 0x AllowanceHolder on Base. Live mode requires a matching key, an exact acknowledgement, a gas reserve, a size cap, and a slippage cap.
-
-Do not make the buy token, chain, transaction target, or acknowledgement configurable. Review any change to these constants as a security-critical change.
+Operator asset management is not part of the public storefront runtime and must remain disabled by default. Review any future asset-moving change privately as security-critical work using dedicated, narrowly funded accounts. Do not publish wallet-access procedures, signing controls, recovery details, or operational thresholds.
 
 ## Input handling
 
@@ -18,9 +16,7 @@ Operational telemetry is rebuilt from an explicit field allowlist. Never add pro
 
 ## Payment boundary
 
-Every paid route parses and validates its request before x402 middleware. When payments are enabled, the route also verifies current Venice epoch access and that the exact configured model is online, private, and capability-compatible before returning payment instructions. Successful readiness is cached for at most 15 seconds and concurrent refreshes are coalesced.
-
-That preflight materially reduces paid provider failures but cannot eliminate a race between readiness, settlement, and inference. Base mainnet therefore requires both durable one-retry buyer credits and an atomic Upstash-backed daily compute reservation before inference. The software budget must not exceed the native Venice key cap; storage failure is fail-closed. `STOREFRONT_ENABLED` remains an independent pre-payment kill switch, and automatic treasury execution stays disabled during the mainnet beta.
+Every paid route validates its request and provider readiness before returning x402 payment instructions. Base mainnet also requires durable delivery protection, an atomic compute-capacity reservation, and an independent pre-payment kill switch. Readiness or safety-state failures block settlement and inference. Exact production settings are operator-only.
 
 The MCP server never requests or receives buyer private keys. A2A and MCP inputs are subject to the same worker parsers as direct calls.
 

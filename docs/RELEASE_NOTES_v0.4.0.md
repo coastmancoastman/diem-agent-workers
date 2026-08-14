@@ -14,5 +14,5 @@
 ## Launch posture
 
 - Payments and acceptance testing remain on Base Sepolia.
-- Treasury execution remains disabled.
-- The Venice compute ceiling remains 1.69 DIEM per epoch.
+- Operator asset management remains disabled.
+- The Venice compute ceiling remains conservatively bounded.
