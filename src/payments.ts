@@ -13,36 +13,11 @@ import {
 } from "./constants.js";
 import type { AppConfig } from "./config.js";
 import { workerContracts, workerPrice } from "./discovery.js";
+import { emitTelemetry, type TelemetrySink } from "./telemetry.js";
 import {
-  emitTelemetry,
-  workerForPath,
-  type TelemetrySink,
-} from "./telemetry.js";
-
-function paymentTelemetryContext(
-  config: AppConfig,
-  transportContext: unknown,
-):
-  | { surface: "worker"; worker: WorkerId; priceUsd: number }
-  | { surface: "a2a"; priceUsd: number }
-  | undefined {
-  const path = (
-    transportContext as { request?: { path?: unknown } } | undefined
-  )?.request?.path;
-  if (typeof path !== "string") return undefined;
-  const worker = workerForPath(path);
-  if (worker) {
-    return {
-      surface: "worker",
-      worker,
-      priceUsd: workerPrice(config, worker),
-    };
-  }
-  if (path === "/a2a") {
-    return { surface: "a2a", priceUsd: config.x402PriceUsd };
-  }
-  return undefined;
-}
+  paymentResponseTelemetryMiddleware,
+  paymentTelemetryContextFromTransport,
+} from "./payment-telemetry.js";
 
 export async function attachPaymentMiddleware(
   app: Express,
@@ -103,22 +78,9 @@ export async function attachPaymentMiddleware(
     routes,
   });
 
-  server.resourceServer.onAfterSettle(async ({ result, phase, transportContext }) => {
-    if (phase === "cancel") return;
-    const context = paymentTelemetryContext(config, transportContext);
-    if (!context) return;
-    emitTelemetry(telemetry, {
-      event: "x402_payment_settled",
-      surface: context.surface,
-      network: result.network,
-      phase,
-      priceUsd: context.priceUsd,
-      ...(context.surface === "worker" ? { worker: context.worker } : {}),
-    });
-  });
   server.resourceServer.onSettleFailure(async ({ phase, transportContext }) => {
     if (phase === "cancel") return;
-    const context = paymentTelemetryContext(config, transportContext);
+    const context = paymentTelemetryContextFromTransport(config, transportContext);
     if (!context) return;
     emitTelemetry(telemetry, {
       event: "x402_payment_failed",
@@ -130,6 +92,7 @@ export async function attachPaymentMiddleware(
   // The CDP class extends this exact x402 server at runtime. Its published
   // declarations currently resolve the private base field through a separate
   // type path, so TypeScript cannot prove the documented compatibility.
+  app.use(paymentResponseTelemetryMiddleware(config, telemetry));
   app.use(
     paymentMiddlewareFromHTTPServer(
       server as unknown as x402HTTPResourceServer,
