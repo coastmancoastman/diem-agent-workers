@@ -104,6 +104,47 @@ describe("x402 payment response telemetry", () => {
     ]);
   });
 
+  it("bundles completed worker metrics into the retained settlement event", async () => {
+    const config = testConfig();
+    const events: TelemetryEvent[] = [];
+    const encoded = encodePaymentResponseHeader({
+      success: true,
+      network: BASE_SEPOLIA_CAIP2,
+      transaction: "0xprivate-transaction-hash",
+    });
+    const app = express();
+    app.use(
+      paymentResponseTelemetryMiddleware(config, {
+        emit: (event) => events.push(event),
+      }),
+    );
+    app.post(WORKERS.extractJson.path, (_req, res) => {
+      res.locals.telemetryWorkerEvent = {
+        event: "worker_completed",
+        worker: WORKERS.extractJson.id,
+        model: "test-model",
+        durationMs: 240,
+        priceUsd: config.x402PriceUsd,
+        estimatedDiemCost: 0.001,
+        estimatedGrossMarginUsd: 0.019,
+      } satisfies TelemetryEvent;
+      res.setHeader("PAYMENT-RESPONSE", encoded);
+      res.json({ ok: true });
+    });
+
+    await request(app).post(WORKERS.extractJson.path).expect(200, { ok: true });
+    expect(events).toEqual([
+      expect.objectContaining({
+        event: "x402_payment_settled",
+        worker: WORKERS.extractJson.id,
+        model: "test-model",
+        workerDurationMs: 240,
+        estimatedDiemCost: 0.001,
+        estimatedGrossMarginUsd: 0.019,
+      }),
+    ]);
+  });
+
   it("does not let malformed settlement metadata change the response", async () => {
     const config = testConfig();
     const events: TelemetryEvent[] = [];

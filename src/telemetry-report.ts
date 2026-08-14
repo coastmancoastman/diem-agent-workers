@@ -126,6 +126,22 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
     bySurface: {} as Record<string, number>,
   };
   const payments = { settled: 0, failed: 0, settledRevenueUsd: 0 };
+  const recordBundledWorkerOutcome = (event: StoredEvent) => {
+    if (typeof event.worker !== "string" || typeof event.model !== "string") {
+      return;
+    }
+    const summary = workerSummary(event.worker);
+    summary.completed += 1;
+    const duration = finiteNumber(event.workerDurationMs);
+    if (duration !== undefined && duration >= 0) summary.durations.push(duration);
+    const cost = finiteNumber(event.estimatedDiemCost);
+    const margin = finiteNumber(event.estimatedGrossMarginUsd);
+    if (cost !== undefined) {
+      summary.estimatedDiemCost += cost;
+      summary.pricedCostSamples += 1;
+    }
+    if (margin !== undefined) summary.estimatedGrossMarginUsd += margin;
+  };
 
   for (const event of events) {
     if (
@@ -179,9 +195,13 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
         summary.settledPayments += 1;
         summary.settledRevenueUsd += price;
       }
+      recordBundledWorkerOutcome(event);
       continue;
     }
-    if (event.event === "x402_payment_failed") payments.failed += 1;
+    if (event.event === "x402_payment_failed") {
+      payments.failed += 1;
+      recordBundledWorkerOutcome(event);
+    }
   }
 
   const publicWorkers: Record<string, WorkerTelemetrySummary> = {};

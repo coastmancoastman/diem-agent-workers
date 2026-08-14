@@ -111,7 +111,26 @@ export function paymentResponseTelemetryMiddleware(
     // Run before the storefront's worker/request finish listeners so hosts
     // that retain one application log keep the authoritative payment result.
     res.prependOnceListener("finish", () => {
-      if (settlementEvent) emitTelemetry(telemetry, settlementEvent);
+      if (!settlementEvent) return;
+      const workerEvent = res.locals.telemetryWorkerEvent as
+        | TelemetryEvent
+        | undefined;
+      if (workerEvent?.event === "worker_completed") {
+        settlementEvent = {
+          ...settlementEvent,
+          worker: workerEvent.worker,
+          model: workerEvent.model,
+          workerDurationMs: workerEvent.durationMs,
+          ...(workerEvent.estimatedDiemCost !== undefined
+            ? { estimatedDiemCost: workerEvent.estimatedDiemCost }
+            : {}),
+          ...(workerEvent.estimatedGrossMarginUsd !== undefined
+            ? { estimatedGrossMarginUsd: workerEvent.estimatedGrossMarginUsd }
+            : {}),
+        };
+        res.locals.telemetryWorkerBundled = true;
+      }
+      emitTelemetry(telemetry, settlementEvent);
     });
     res.setHeader = function setHeaderWithSettlementTelemetry(name, value) {
       if (!settlementRecorded && name.toLowerCase() === "payment-response") {

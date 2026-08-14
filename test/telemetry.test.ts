@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { VeniceCatalogCostEstimator } from "../src/costs.js";
-import { WORKERS } from "../src/constants.js";
+import { BASE_SEPOLIA_CAIP2, WORKERS } from "../src/constants.js";
 import {
   JsonConsoleTelemetry,
   TELEMETRY_SCOPE,
@@ -183,6 +183,34 @@ describe("privacy-preserving telemetry", () => {
       settledPayments: 1,
       estimatedDiemCost: 0.0001,
       p50DurationMs: 200,
+    });
+  });
+
+  it("summarizes a consolidated paid worker outcome without double counting", () => {
+    const event = sanitizeTelemetryEvent({
+      event: "x402_payment_settled",
+      surface: "worker",
+      network: BASE_SEPOLIA_CAIP2,
+      phase: "after-handler",
+      priceUsd: 0.02,
+      worker: WORKERS.extractJson.id,
+      model: "test-model",
+      workerDurationMs: 325,
+      estimatedDiemCost: 0.0015,
+      estimatedGrossMarginUsd: 0.0185,
+    });
+    const report = summarizeTelemetry([event]);
+
+    expect(report.payments).toMatchObject({
+      settled: 1,
+      settledRevenueUsd: 0.02,
+    });
+    expect(report.workers[WORKERS.extractJson.id]).toMatchObject({
+      completed: 1,
+      settledPayments: 1,
+      estimatedDiemCost: 0.0015,
+      estimatedGrossMarginUsd: 0.0185,
+      p50DurationMs: 325,
     });
   });
 });
