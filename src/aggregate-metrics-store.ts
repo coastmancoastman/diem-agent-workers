@@ -276,6 +276,29 @@ function snapshot(values: ReadonlyMap<string, number>): AggregateMetricsSnapshot
   };
 }
 
+/** Normalize both raw-array and deserialized-object HGETALL responses. */
+export function aggregateMetricsSnapshotFromRedisHash(
+  raw: unknown,
+): AggregateMetricsSnapshot {
+  const entries: Array<[string, unknown]> = [];
+  if (Array.isArray(raw)) {
+    for (let index = 0; index + 1 < raw.length; index += 2) {
+      if (typeof raw[index] === "string") {
+        entries.push([raw[index], raw[index + 1]]);
+      }
+    }
+  } else if (typeof raw === "object" && raw !== null) {
+    entries.push(...Object.entries(raw));
+  }
+
+  const values = new Map<string, number>();
+  for (const [field, rawValue] of entries) {
+    const parsed = Number(rawValue);
+    if (Number.isSafeInteger(parsed) && parsed >= 0) values.set(field, parsed);
+  }
+  return snapshot(values);
+}
+
 /** Deterministic test/local implementation with the same aggregate-only schema. */
 export class MemoryAggregateMetricsStore implements AggregateMetricsStore {
   private readonly values = new Map<string, number>();
@@ -347,13 +370,8 @@ export class UpstashAggregateMetricsStore implements AggregateMetricsStore {
   }
 
   async snapshot(): Promise<AggregateMetricsSnapshot> {
-    const raw = await this.redis.hgetall<Record<string, string | number>>(METRICS_KEY);
-    const values = new Map<string, number>();
-    for (const [field, rawValue] of Object.entries(raw ?? {})) {
-      const parsed = Number(rawValue);
-      if (Number.isSafeInteger(parsed) && parsed >= 0) values.set(field, parsed);
-    }
-    return snapshot(values);
+    const raw: unknown = await this.redis.hgetall(METRICS_KEY);
+    return aggregateMetricsSnapshotFromRedisHash(raw);
   }
 }
 

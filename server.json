@@ -7,7 +7,7 @@
     "url": "https://github.com/coastmancoastman/diem-agent-workers",
     "source": "github"
   },
-  "version": "0.6.0",
+  "version": "0.6.1",
   "remotes": [
     {
       "type": "streamable-http",
