@@ -18,5 +18,5 @@ This release adds measurable, privacy-preserving storefront operations and a sec
 ## Safety posture
 
 - Payments remain on Base Sepolia with faucet-only test USDC.
-- Mainnet payments and treasury conversion remain disabled.
-- Venice inference remains capped at 1.69 DIEM per epoch.
+- Mainnet payments and operator asset management remain disabled.
+- Venice inference remains protected by a conservative provider-side capacity ceiling.

@@ -22,10 +22,10 @@ The first public beta of a machine-discoverable x402 storefront powered by Venic
 ## Safety posture
 
 - Payments remain on Base Sepolia with faucet-only test USDC.
-- Mainnet payments and the automated treasury remain disabled by default.
+- Mainnet payments and operator asset management remain disabled by default.
 - Worker inputs are bounded, schema-validated, rate-limited, and treated as untrusted data.
-- Venice inference is capped at 1.69 DIEM per epoch.
-- Wallet and API credentials remain outside the repository in macOS Keychain or deployment secrets.
+- Venice inference is protected by a conservative provider-side capacity ceiling.
+- Wallet and API credentials remain outside the repository in private managed storage.
 
 ## Verification
 
