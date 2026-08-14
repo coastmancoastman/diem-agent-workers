@@ -3,6 +3,8 @@ import { decodePaymentResponseHeader, decodePaymentSignatureHeader } from "@x402
 import type { Request, RequestHandler, Response } from "express";
 import type { AppConfig } from "./config.js";
 import { WORKERS, type WorkerId } from "./constants.js";
+import type { ComputeBudgetStore } from "./compute-budget-store.js";
+import { workerPrice } from "./discovery.js";
 import type {
   DeliveryCreditContext,
   DeliveryCreditStore,
@@ -99,6 +101,8 @@ function requestContext(
       keyFingerprint: fingerprint(secret, "idempotency-key", idempotencyKey),
       paymentFingerprint: fingerprint(secret, "payment-signature", paymentHeader),
       requestFingerprint: fingerprint(secret, "request", canonicalRequest),
+      reservedDiem:
+        path === "/a2a" ? config.x402PriceUsd : workerPrice(config, worker),
     },
   };
 }
@@ -153,6 +157,7 @@ export function deliveryCreditMiddleware(
   config: AppConfig,
   store: DeliveryCreditStore,
   telemetry: TelemetrySink,
+  computeBudgetStore?: ComputeBudgetStore,
 ): RequestHandler {
   return async (req, res, next) => {
     const result = requestContext(
@@ -227,6 +232,50 @@ export function deliveryCreditMiddleware(
 
     res.locals.deliveryCreditContext = result.context;
     if (claim === "retry") {
+      if (computeBudgetStore) {
+        try {
+          const reservation = await computeBudgetStore.reserve(
+            result.context.worker,
+            result.context.reservedDiem,
+            Date.now(),
+          );
+          if (reservation.status === "exhausted") {
+            await store.deferRetry(result.context, Date.now());
+            emitTelemetry(telemetry, {
+              event: "compute_budget_blocked",
+              worker: result.context.worker,
+              reason: "exhausted",
+            });
+            noStore(res);
+            res.setHeader("Retry-After", String(reservation.retryAfterSeconds));
+            res.status(503).json({
+              error: "compute_budget_exhausted",
+              resetsAt: reservation.resetsAt,
+            });
+            return;
+          }
+          emitTelemetry(telemetry, {
+            event: "compute_budget_reserved",
+            worker: result.context.worker,
+            reservedDiem: reservation.reservedDiem,
+          });
+        } catch {
+          try {
+            await store.deferRetry(result.context, Date.now());
+          } catch {
+            // The retry lease remains bounded even if both stores are unavailable.
+          }
+          emitTelemetry(telemetry, {
+            event: "compute_budget_blocked",
+            worker: result.context.worker,
+            reason: "store_unavailable",
+          });
+          noStore(res);
+          res.setHeader("Retry-After", "5");
+          res.status(503).json({ error: "compute_budget_unavailable" });
+          return;
+        }
+      }
       res.locals.deliveryCreditRetry = true;
       res.setHeader("x-delivery-credit", "redeemed");
       emitTelemetry(telemetry, {

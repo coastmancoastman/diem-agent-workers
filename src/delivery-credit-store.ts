@@ -14,6 +14,7 @@ export interface DeliveryCreditContext {
   paymentFingerprint: string;
   requestFingerprint: string;
   worker: WorkerId;
+  reservedDiem: number;
 }
 
 export type DeliveryCreditClaimResult =
@@ -52,6 +53,7 @@ export interface DeliveryCreditStore {
     nowMs: number,
   ): Promise<void>;
   releaseRetry(context: DeliveryCreditContext, nowMs: number): Promise<void>;
+  deferRetry(context: DeliveryCreditContext, nowMs: number): Promise<void>;
 }
 
 interface MemoryRecord extends DeliveryCreditContext {
@@ -197,6 +199,19 @@ export class MemoryDeliveryCreditStore implements DeliveryCreditStore {
     if (!record || !this.matches(record, context)) return;
     if (record.state === "retry_running") {
       record.state = "exhausted";
+      record.leaseUntilMs = 0;
+      this.refresh(record, nowMs);
+    }
+  }
+
+  async deferRetry(
+    context: DeliveryCreditContext,
+    nowMs: number,
+  ): Promise<void> {
+    const record = this.record(context, nowMs);
+    if (!record || !this.matches(record, context)) return;
+    if (record.state === "retry_running") {
+      record.state = "pending_delivery";
       record.leaseUntilMs = 0;
       this.refresh(record, nowMs);
     }
@@ -393,6 +408,13 @@ export class UpstashDeliveryCreditStore implements DeliveryCreditStore {
     _nowMs: number,
   ): Promise<void> {
     await this.transition(context, "retry_running", "exhausted", 0);
+  }
+
+  async deferRetry(
+    context: DeliveryCreditContext,
+    _nowMs: number,
+  ): Promise<void> {
+    await this.transition(context, "retry_running", "pending_delivery", 0);
   }
 
   private async transition(

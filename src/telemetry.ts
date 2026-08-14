@@ -2,7 +2,7 @@ import type { WorkerId } from "./constants.js";
 import { WORKERS } from "./constants.js";
 
 export const TELEMETRY_SCOPE = "diem_agent_storefront";
-export const TELEMETRY_SCHEMA_VERSION = 1;
+export const TELEMETRY_SCHEMA_VERSION = 2;
 
 export type TelemetrySurface =
   | "worker"
@@ -11,6 +11,7 @@ export type TelemetrySurface =
   | "mcp"
   | "discovery"
   | "health"
+  | "terms"
   | "treasury_status"
   | "other";
 
@@ -87,6 +88,16 @@ export type TelemetryEvent =
       event: "delivery_credit_rejected";
       worker: WorkerId;
       reason: DeliveryCreditRejectionReason;
+    }
+  | {
+      event: "compute_budget_reserved";
+      worker: WorkerId;
+      reservedDiem: number;
+    }
+  | {
+      event: "compute_budget_blocked";
+      worker: WorkerId;
+      reason: "exhausted" | "store_unavailable";
     };
 
 export interface TelemetrySink {
@@ -211,6 +222,14 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): Record<string, un
       return { ...base, worker: event.worker };
     case "delivery_credit_rejected":
       return { ...base, worker: event.worker, reason: event.reason };
+    case "compute_budget_reserved":
+      return {
+        ...base,
+        worker: event.worker,
+        reservedDiem: money(event.reservedDiem),
+      };
+    case "compute_budget_blocked":
+      return { ...base, worker: event.worker, reason: event.reason };
   }
 }
 
@@ -251,6 +270,7 @@ export function classifySurface(path: string): {
   if (path === "/a2a") return { surface: "a2a" };
   if (path === "/mcp") return { surface: "mcp" };
   if (path === "/health") return { surface: "health" };
+  if (path === "/terms") return { surface: "terms" };
   if (path === "/v1/treasury/status") return { surface: "treasury_status" };
   if (path === "/v1/quote/extract-json") {
     return { surface: "quote", worker: WORKERS.extractJson.id };

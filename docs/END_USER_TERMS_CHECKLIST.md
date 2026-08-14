@@ -2,7 +2,8 @@
 
 This is an implementation checklist, not legal advice.
 
-Before serving third parties, publish terms that:
+The launch terms are published in [`TERMS.md`](../TERMS.md) and at the runtime
+`/terms` endpoint. Before materially expanding the beta, confirm that they:
 
 - Bind callers and their operators to applicable Venice terms and model-provider policies.
 - Prohibit unlawful, abusive, excessive, and high-stakes uses.
@@ -15,4 +16,4 @@ Before serving third parties, publish terms that:
 - Reserve the ability to suspend callers who threaten the service or violate applicable terms.
 - Identify the legal operator, jurisdiction, contact method, and effective date.
 
-Venice's current terms place responsibility for end-user conduct on API product operators and require end-user terms at least as protective as Venice's own terms. Have qualified counsel review the final terms before mainnet launch.
+Venice's current terms place responsibility for end-user conduct on API product operators and require end-user terms at least as protective as Venice's own terms. The current document is an operational safeguard, not a substitute for qualified legal review; counsel should review it before material volume or treasury automation.

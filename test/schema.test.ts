@@ -3,6 +3,7 @@ import {
   parseClassifyTextInput,
   parseExtractJsonInput,
   parseGenerateDraftImageInput,
+  parseSummarizeTextInput,
   parseTextToSpeechInput,
   parseTranscribeAudioInput,
   validateStrictSchema,
@@ -42,6 +43,21 @@ describe("strict extraction schemas", () => {
     expect(() =>
       parseExtractJsonInput({ source: "x".repeat(40_001), schema: validSchema }),
     ).toThrow(/40,000/);
+  });
+
+  it("bounds UTF-8 bytes so hostile Unicode cannot evade fixed-price limits", () => {
+    expect(() =>
+      parseExtractJsonInput({ source: "€".repeat(16_001), schema: validSchema }),
+    ).toThrow(/48,000 UTF-8 bytes/);
+    expect(() =>
+      parseClassifyTextInput({
+        source: "€".repeat(8_001),
+        labels: ["a", "b"],
+      }),
+    ).toThrow(/24,000 UTF-8 bytes/);
+    expect(() =>
+      parseSummarizeTextInput({ source: "€".repeat(16_001) }),
+    ).toThrow(/48,000 UTF-8 bytes/);
   });
 });
 

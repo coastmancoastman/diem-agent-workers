@@ -24,10 +24,19 @@ describe("machine-first HTTP API", () => {
     const health = await request(app).get("/health");
     expect(health.status).toBe(200);
     expect(health.body.computeBudget).toEqual({
-      currency: "DIEM",
-      cap: 1.69,
-      period: "EPOCH",
-      resetsAt: "00:00 UTC",
+      provider: {
+        currency: "DIEM",
+        cap: 1.69,
+        period: "EPOCH",
+        resetsAt: "00:00 UTC",
+      },
+      software: {
+        mode: "off",
+        currency: "DIEM",
+        cap: 0.25,
+        period: "UTC_DAY",
+        resetsAt: "00:00 UTC",
+      },
     });
     expect(health.body.version).toBe(SERVICE_VERSION);
     const catalog = await request(app).get("/v1/catalog");
@@ -40,17 +49,33 @@ describe("machine-first HTTP API", () => {
     const wellKnownCatalog = await request(app).get("/.well-known/agent-catalog.json");
     expect(wellKnownCatalog.body).toEqual(catalog.body);
     expect(catalog.body.computeBudget).toEqual({
-      provider: "venice",
-      currency: "DIEM",
-      cap: 1.69,
-      period: "EPOCH",
-      resetsAt: "00:00 UTC",
-      enforcement: "provider_api_key",
+      provider: {
+        name: "venice",
+        currency: "DIEM",
+        cap: 1.69,
+        period: "EPOCH",
+        resetsAt: "00:00 UTC",
+        enforcement: "provider_api_key",
+      },
+      software: {
+        mode: "off",
+        currency: "DIEM",
+        cap: 0.25,
+        period: "UTC_DAY",
+        resetsAt: "00:00 UTC",
+        enforcement: "atomic_upstash_reservation_before_inference",
+      },
     });
     expect((await request(app).get("/openapi.json")).body.openapi).toBe("3.1.0");
     const llms = (await request(app).get("/llms.txt")).text;
     expect(llms).toContain(WORKER_ID);
     expect(llms).toContain("1.69 DIEM per EPOCH");
+    expect(llms).toContain("0.25 DIEM per UTC day");
+    const terms = await request(app).get("/terms").expect(200);
+    expect(terms.body.termsUrl).toBe("http://test.local/terms");
+    expect(terms.body.prohibitedUses).toContain(
+      "submission of credentials, authentication tokens, private keys, seed phrases, or data the caller lacks authority to process",
+    );
     const card = await request(app).get("/.well-known/agent-card.json");
     expect(card.body.supportedInterfaces[0]).toMatchObject({
       url: "http://test.local/a2a",

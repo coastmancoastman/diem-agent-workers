@@ -232,4 +232,24 @@ describe("privacy-preserving telemetry", () => {
     });
     expect(JSON.stringify([redeemed, rejected])).not.toContain("fingerprint");
   });
+
+  it("reports budget reservations and fail-closed blocks without request data", () => {
+    const reserved = sanitizeTelemetryEvent({
+      event: "compute_budget_reserved",
+      worker: WORKERS.summarizeText.id,
+      reservedDiem: 0.02,
+    });
+    const blocked = sanitizeTelemetryEvent({
+      event: "compute_budget_blocked",
+      worker: WORKERS.summarizeText.id,
+      reason: "exhausted",
+    });
+    const report = summarizeTelemetry([reserved, blocked]);
+    expect(report.computeBudget).toEqual({
+      reservations: 1,
+      reservedDiem: 0.02,
+      blocked: 1,
+      byReason: { exhausted: 1 },
+    });
+  });
 });

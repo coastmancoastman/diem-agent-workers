@@ -24,12 +24,14 @@ import {
   deliveryCreditMiddleware,
 } from "./delivery-credits.js";
 import type { DeliveryCreditStore } from "./delivery-credit-store.js";
+import type { ComputeBudgetStore } from "./compute-budget-store.js";
 
 export async function attachPaymentMiddleware(
   app: Express,
   config: AppConfig,
   telemetry: TelemetrySink,
   deliveryCreditStore?: DeliveryCreditStore,
+  computeBudgetStore?: ComputeBudgetStore,
 ): Promise<void> {
   if (config.paymentsMode === "off") return;
   if (!config.treasuryAddress) {
@@ -59,7 +61,7 @@ export async function attachPaymentMiddleware(
         `POST ${worker.path}`,
         {
           price: `$${workerPrice(config, worker.id).toFixed(3)}`,
-          description: worker.description,
+          description: `${worker.description} Use constitutes acceptance of ${config.publicBaseUrl}/terms.`,
           networks: [network],
           extensions,
         },
@@ -72,7 +74,7 @@ export async function attachPaymentMiddleware(
       {
         price: `$${config.x402PriceUsd.toFixed(3)}`,
         description:
-          "A2A 1.0 JSON-RPC adapter for synchronous DIEM Agent Workers. SendMessage accepts one JSON data part containing worker and input.",
+          `A2A 1.0 JSON-RPC adapter for synchronous DIEM Agent Workers. SendMessage accepts one JSON data part containing worker and input. Use constitutes acceptance of ${config.publicBaseUrl}/terms.`,
         networks: [network],
       },
     ],
@@ -98,12 +100,56 @@ export async function attachPaymentMiddleware(
       }
       try {
         const result = await deliveryCreditStore.beginVerified(context, Date.now());
-        if (result === "started") return;
-        return {
-          abort: true,
-          reason: `delivery_credit_${result}`,
-          message: "The idempotency key cannot start another paid request",
-        };
+        if (result !== "started") {
+          return {
+            abort: true,
+            reason: `delivery_credit_${result}`,
+            message: "The idempotency key cannot start another paid request",
+          };
+        }
+        if (!computeBudgetStore) return;
+        try {
+          const reservation = await computeBudgetStore.reserve(
+            context.worker,
+            context.reservedDiem,
+            Date.now(),
+          );
+          if (reservation.status === "reserved") {
+            emitTelemetry(telemetry, {
+              event: "compute_budget_reserved",
+              worker: context.worker,
+              reservedDiem: reservation.reservedDiem,
+            });
+            return;
+          }
+          await deliveryCreditStore.cancelVerified(context, false, Date.now());
+          emitTelemetry(telemetry, {
+            event: "compute_budget_blocked",
+            worker: context.worker,
+            reason: "exhausted",
+          });
+          return {
+            abort: true,
+            reason: "compute_budget_exhausted",
+            message: `Daily compute budget exhausted until ${reservation.resetsAt}`,
+          };
+        } catch {
+          try {
+            await deliveryCreditStore.cancelVerified(context, false, Date.now());
+          } catch {
+            // The delivery lease is bounded; fail the payment even if cleanup fails.
+          }
+          emitTelemetry(telemetry, {
+            event: "compute_budget_blocked",
+            worker: context.worker,
+            reason: "store_unavailable",
+          });
+          return {
+            abort: true,
+            reason: "compute_budget_store_unavailable",
+            message: "Compute budget protection is temporarily unavailable",
+          };
+        }
       } catch {
         return {
           abort: true,
@@ -187,7 +233,14 @@ export async function attachPaymentMiddleware(
   // type path, so TypeScript cannot prove the documented compatibility.
   app.use(paymentResponseTelemetryMiddleware(config, telemetry));
   if (deliveryCreditStore) {
-    app.use(deliveryCreditMiddleware(config, deliveryCreditStore, telemetry));
+    app.use(
+      deliveryCreditMiddleware(
+        config,
+        deliveryCreditStore,
+        telemetry,
+        computeBudgetStore,
+      ),
+    );
   }
   const paymentHandler = paymentMiddlewareFromHTTPServer(
     server as unknown as x402HTTPResourceServer,

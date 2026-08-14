@@ -2,20 +2,20 @@
 
 Machine-discoverable micro-work powered by Venice inference, paid in USDC through x402, with a treasury that can only reinvest USDC into Venice DIEM on Base.
 
-This repository is a fail-closed, agent-first Base Sepolia storefront. It exposes six bounded workers over plain HTTP + x402, publishes them to the CDP Bazaar, and adds A2A 1.0, MCP, OpenAPI, `llms.txt`, and portable-skill discovery surfaces.
+This repository is a fail-closed, agent-first Base mainnet storefront. It exposes six bounded workers over plain HTTP + x402, publishes them to the CDP Bazaar, and adds A2A 1.0, MCP, OpenAPI, `llms.txt`, and portable-skill discovery surfaces.
 
 Public beta: [diem-agent-workers.vercel.app](https://diem-agent-workers.vercel.app)
 
 | Worker | Bounded outcome | Beta price |
 | --- | --- | ---: |
 | `extract_text_to_json` | Caller-schema-valid extraction | $0.020 USDC |
-| `classify_text` | Exactly one caller-supplied label | $0.005 USDC |
-| `summarize_text` | Structured abstract and key points | $0.005 USDC |
+| `classify_text` | Exactly one caller-supplied label | $0.010 USDC |
+| `summarize_text` | Structured abstract and key points | $0.020 USDC |
 | `text_to_speech` | Up to 1,000 characters as MP3 | $0.010 USDC |
 | `generate_draft_image` | One safe-mode 1024px WebP | $0.020 USDC |
 | `transcribe_audio` | Up to 60 seconds of verified PCM WAV | $0.015 USDC |
 
-These are fixed prices per successful authorization attempt, not estimates. The public deployment remains on Base Sepolia until durable delivery credits pass public testnet acceptance, per-worker DIEM costs are priced, and independent beta traffic is proven.
+These are fixed prices per successful authorization attempt, not estimates. The public deployment is a low-cap Base mainnet beta: an atomic 0.25 DIEM software budget limits daily inference starts, while the Venice API key retains a separate 1.69 DIEM provider backstop.
 
 ## The flywheel
 
@@ -31,6 +31,8 @@ Purchased DIEM is not automatically staked in this release. Venice currently dir
 - Three Venice structured-output text workers with post-response JSON Schema validation
 - Bounded Venice speech, image, and transcription workers
 - Native Venice API-key compute ceiling of 1.69 DIEM per EPOCH (daily, resetting at 00:00 UTC)
+- Atomic Upstash-backed software ceiling of 0.25 DIEM of conservatively reserved work per UTC day
+- An environment-backed storefront kill switch checked before payment
 - Input validation before payment, including exact PCM WAV duration checks
 - Pre-payment Venice epoch-access, model-online, private-model, and capability checks
 - Free machine-readable catalog and per-worker fixed-price quotes
@@ -40,6 +42,7 @@ Purchased DIEM is not automatically staked in this release. Venice currently dir
 - Official MCP Registry metadata for the public Streamable HTTP server
 - Privacy-preserving operational telemetry and an aggregate margin report
 - Durable, idempotent paid-delivery credits backed by atomic Upstash Redis state
+- Published machine-readable terms linked from every response and discovery surface
 - Payments sent directly to a dedicated treasury address
 - Quote-only and live USDC-to-DIEM treasury modes
 - Hard-coded Base USDC, Venice DIEM, chain ID, and 0x AllowanceHolder
@@ -100,7 +103,7 @@ curl -X POST http://127.0.0.1:8402/v1/jobs/extract-json \
   }'
 ```
 
-Production refuses to start unless `PAYMENTS_MODE=production`. The checked-in and local defaults remain `PAYMENTS_MODE=off` and `TREASURY_MODE=disabled`.
+Production refuses to start unless `PAYMENTS_MODE=production`, durable delivery credits are enforced, and the global compute budget is enforced. The checked-in and local defaults remain `PAYMENTS_MODE=off`, `STOREFRONT_ENABLED=false`, and `TREASURY_MODE=disabled`.
 
 ## Add x402 payments
 
@@ -148,6 +151,18 @@ settlement but before delivery completes, the same authorization, key, worker, a
 request may redeem one retry without another settlement. Conflicting reuse is
 rejected, and storage outages return `503` before settlement.
 
+### Mainnet compute budget and kill switch
+
+Production also requires an atomic global compute budget:
+
+```dotenv
+COMPUTE_BUDGET_MODE=enforced
+COMPUTE_BUDGET_DIEM_PER_DAY=0.25
+STOREFRONT_ENABLED=true
+```
+
+The service reserves a conservative amount equal to the job's USDC price after x402 verification but before Venice inference. Delivery retries reserve again because they can consume provider capacity even when the buyer is not charged again. A Redis outage or exhausted budget aborts new payment settlement and blocks inference. Set `STOREFRONT_ENABLED=false` and redeploy to disable all paid work before payment.
+
 Run the guarded local Base Sepolia settlement test with:
 
 ```bash
@@ -160,15 +175,16 @@ call, and reconciles the treasury's test-USDC increase. It refuses to run unless
 the saved `PAYMENTS_MODE` is `off` and `TREASURY_MODE` is `disabled`. Local HTTP
 tests are not published to Bazaar; a public HTTPS deployment is required.
 
-Before mainnet:
+Mainnet launch checklist:
 
 1. Use a dedicated, low-balance treasury wallet—not a personal wallet.
 2. Verify the address and Base network.
 3. Deploy behind public HTTPS.
 4. Validate the x402 endpoint with the CDP validation API.
-5. Complete a real low-value payment so Bazaar can index it.
-6. Change `PAYMENTS_MODE=production` only after testnet behavior is confirmed.
-7. Enable the durable delivery-credit store and verify interruption recovery on public testnet.
+5. Publish and review [TERMS.md](TERMS.md); every API response links to `/terms`.
+6. Enable durable delivery credits and the 0.25 DIEM atomic software budget.
+7. Set `PAYMENTS_MODE=production`, keep `TREASURY_MODE=disabled`, and deploy.
+8. Complete one real low-value payment so Bazaar can index the Base mainnet resource.
 
 ## Reinvest USDC into DIEM
 
@@ -242,7 +258,7 @@ The runner does not sell DIEM, withdraw USDC, bridge assets, select arbitrary to
 - `GET /openapi.json` — OpenAPI 3.1 contract
 - `GET /llms.txt` — concise agent-readable index
 - `GET /.well-known/agent-card.json` — A2A 1.0 Agent Card
-- `POST /a2a` — A2A 1.0 JSON-RPC `SendMessage` adapter at a fixed $0.020 test-USDC price
+- `POST /a2a` — A2A 1.0 JSON-RPC `SendMessage` adapter at a fixed $0.020 USDC price
 - `POST /mcp` — stateless Streamable HTTP MCP server with free catalog, quote, and call-preparation tools
 - `skills/extract-text-to-json/` — portable agent skill
 - x402 Bazaar metadata — automatically attached when payments are enabled
@@ -270,11 +286,11 @@ vercel logs --environment production --since 24h --no-branch --json --limit 1000
   | pnpm telemetry:report
 ```
 
-The report contains request and payment counts, settled test-USDC revenue, estimated DIEM cost and gross margin, latency percentiles, and coarse failure counts. It cannot reconstruct individual customer content or identity.
+The report contains request and payment counts, settled USDC revenue, estimated DIEM cost and gross margin, latency percentiles, and coarse failure counts. It cannot reconstruct individual customer content or identity.
 
 ## Security and legal notes
 
-Read [SECURITY.md](SECURITY.md) and [docs/END_USER_TERMS_CHECKLIST.md](docs/END_USER_TERMS_CHECKLIST.md) before accepting third-party work. AI output matching a schema is not proof that its contents are correct. Do not use this worker for high-stakes decisions.
+Use of the service is governed by [TERMS.md](TERMS.md), also published at `/terms`. Read [SECURITY.md](SECURITY.md) and [docs/END_USER_TERMS_CHECKLIST.md](docs/END_USER_TERMS_CHECKLIST.md) before accepting third-party work. AI output matching a schema is not proof that its contents are correct. Do not use this worker for high-stakes decisions.
 
 ## Verification
 

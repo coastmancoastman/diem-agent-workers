@@ -75,6 +75,7 @@ export function createDiemMcpServer(config: AppConfig): McpServer {
           protocol: "x402",
           exact: true,
         },
+        terms: `${config.publicBaseUrl}/terms`,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -101,11 +102,17 @@ export function createDiemMcpServer(config: AppConfig): McpServer {
       const result = {
         method: "POST",
         url: `${config.publicBaseUrl}${definition.path}`,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "<generate-unpredictable-16-to-128-character-value>",
+        },
         body: input,
         inputSchema: workerContracts[worker].inputSchema,
         priceUsd: workerPrice(config, worker).toFixed(3),
         payment: "x402 exact USDC; the first unpaid request returns payment instructions",
+        terms: `${config.publicBaseUrl}/terms`,
+        acceptance:
+          "Calling or paying for the service constitutes acceptance by the caller and its operator.",
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
