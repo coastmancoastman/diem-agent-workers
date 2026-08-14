@@ -15,7 +15,7 @@ Public beta: [diem-agent-workers.vercel.app](https://diem-agent-workers.vercel.a
 | `generate_draft_image` | One safe-mode 1024px WebP | $0.020 USDC |
 | `transcribe_audio` | Up to 60 seconds of verified PCM WAV | $0.015 USDC |
 
-These are fixed prices per successful authorization attempt, not estimates. The public deployment remains on Base Sepolia until paid-failure credits or refunds, durable capacity reservations, and independent beta traffic are proven.
+These are fixed prices per successful authorization attempt, not estimates. The public deployment remains on Base Sepolia until durable delivery credits pass public testnet acceptance, per-worker DIEM costs are priced, and independent beta traffic is proven.
 
 ## The flywheel
 
@@ -39,6 +39,7 @@ Purchased DIEM is not automatically staked in this release. Venice currently dir
 - Rich per-worker x402 Bazaar input/output metadata
 - Official MCP Registry metadata for the public Streamable HTTP server
 - Privacy-preserving operational telemetry and an aggregate margin report
+- Durable, idempotent paid-delivery credits backed by atomic Upstash Redis state
 - Payments sent directly to a dedicated treasury address
 - Quote-only and live USDC-to-DIEM treasury modes
 - Hard-coded Base USDC, Venice DIEM, chain ID, and 0x AllowanceHolder
@@ -122,6 +123,31 @@ CDP_API_KEY_SECRET=...
 
 The server uses the address form of the CDP configuration, so payments settle directly to `TREASURY_ADDRESS`; CDP does not provision or control that wallet. An unpaid request to the worker should return HTTP 402 and a `PAYMENT-REQUIRED` header.
 
+### Paid-delivery protection
+
+Mainnet is fail-closed unless durable delivery credits are enforced. Provision an
+Upstash Redis database through the Vercel Marketplace, then configure:
+
+```dotenv
+DELIVERY_CREDITS_MODE=enforced
+DELIVERY_CREDIT_HMAC_SECRET=<at-least-32-random-bytes>
+DELIVERY_CREDIT_TTL_SECONDS=86400
+DELIVERY_CREDIT_LEASE_SECONDS=180
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+```
+
+Agents should generate one unpredictable `Idempotency-Key` per logical job and
+reuse it only with the identical request and payment authorization. Signed paid
+attempts without the header fail before settlement. The Redis record contains
+only HMAC fingerprints, worker ID, state, lease, and expiry—never request bodies,
+provider responses, payer addresses, payment headers, or transaction hashes.
+
+Normal successful delivery consumes the key. If the process is interrupted after
+settlement but before delivery completes, the same authorization, key, worker, and
+request may redeem one retry without another settlement. Conflicting reuse is
+rejected, and storage outages return `503` before settlement.
+
 Run the guarded local Base Sepolia settlement test with:
 
 ```bash
@@ -142,7 +168,7 @@ Before mainnet:
 4. Validate the x402 endpoint with the CDP validation API.
 5. Complete a real low-value payment so Bazaar can index it.
 6. Change `PAYMENTS_MODE=production` only after testnet behavior is confirmed.
-7. Add a durable reservation/credit mechanism so a rare provider race after payment cannot strand a buyer without work or credit.
+7. Enable the durable delivery-credit store and verify interruption recovery on public testnet.
 
 ## Reinvest USDC into DIEM
 

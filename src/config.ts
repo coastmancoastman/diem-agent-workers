@@ -2,6 +2,7 @@ import { isAddress, type Address, type Hex } from "viem";
 import { TREASURY_LIVE_ACK, VENICE_DEFAULT_BASE_URL } from "./constants.js";
 
 export type PaymentsMode = "off" | "development" | "production";
+export type DeliveryCreditsMode = "off" | "enforced";
 export type TreasuryMode = "disabled" | "quote" | "live";
 export type TreasuryKeychainBackend = "security-cli" | "native-helper";
 
@@ -102,6 +103,12 @@ export interface AppConfig {
   cdpApiKeyId?: string;
   cdpApiKeySecret?: string;
   paymentsMode: PaymentsMode;
+  deliveryCreditsMode: DeliveryCreditsMode;
+  deliveryCreditHmacSecret?: string;
+  deliveryCreditTtlSeconds: number;
+  deliveryCreditLeaseSeconds: number;
+  upstashRedisRestUrl?: string;
+  upstashRedisRestToken?: string;
   x402PriceUsd: number;
   x402ClassifyPriceUsd: number;
   x402SummarizePriceUsd: number;
@@ -149,6 +156,16 @@ export function loadConfig(
     ["disabled", "quote", "live"] as const,
     "disabled",
   );
+  const deliveryCreditsMode = enumValue(
+    "DELIVERY_CREDITS_MODE",
+    env.DELIVERY_CREDITS_MODE,
+    ["off", "enforced"] as const,
+    "off",
+  );
+  const upstashRedisRestUrlValue =
+    env.UPSTASH_REDIS_REST_URL ?? env.KV_REST_API_URL;
+  const upstashRedisRestToken =
+    env.UPSTASH_REDIS_REST_TOKEN ?? env.KV_REST_API_TOKEN;
   const treasuryAddress = optionalAddress("TREASURY_ADDRESS", env.TREASURY_ADDRESS);
   const treasuryPrivateKey = optionalPrivateKey(env.TREASURY_PRIVATE_KEY);
   const treasuryKeychainBackend = enumValue(
@@ -194,6 +211,32 @@ export function loadConfig(
     ...(env.CDP_API_KEY_ID ? { cdpApiKeyId: env.CDP_API_KEY_ID } : {}),
     ...(env.CDP_API_KEY_SECRET ? { cdpApiKeySecret: env.CDP_API_KEY_SECRET } : {}),
     paymentsMode,
+    deliveryCreditsMode,
+    ...(env.DELIVERY_CREDIT_HMAC_SECRET
+      ? { deliveryCreditHmacSecret: env.DELIVERY_CREDIT_HMAC_SECRET }
+      : {}),
+    deliveryCreditTtlSeconds: numberValue(
+      "DELIVERY_CREDIT_TTL_SECONDS",
+      env.DELIVERY_CREDIT_TTL_SECONDS,
+      86_400,
+      { min: 300, max: 604_800 },
+    ),
+    deliveryCreditLeaseSeconds: numberValue(
+      "DELIVERY_CREDIT_LEASE_SECONDS",
+      env.DELIVERY_CREDIT_LEASE_SECONDS,
+      180,
+      { min: 60, max: 900 },
+    ),
+    ...(upstashRedisRestUrlValue
+      ? {
+          upstashRedisRestUrl: httpsBaseUrl(
+            "UPSTASH_REDIS_REST_URL",
+            upstashRedisRestUrlValue,
+            upstashRedisRestUrlValue,
+          ),
+        }
+      : {}),
+    ...(upstashRedisRestToken ? { upstashRedisRestToken } : {}),
     x402PriceUsd: numberValue("X402_PRICE_USD", env.X402_PRICE_USD, 0.02, {
       min: 0.001,
       max: 10,
@@ -289,6 +332,29 @@ export function loadConfig(
 export function validateConfig(config: AppConfig): void {
   if (config.appEnv === "production" && config.paymentsMode !== "production") {
     throw new Error("Production service must use PAYMENTS_MODE=production");
+  }
+  if (
+    config.paymentsMode === "production" &&
+    config.deliveryCreditsMode !== "enforced"
+  ) {
+    throw new Error(
+      "Production payments require DELIVERY_CREDITS_MODE=enforced",
+    );
+  }
+  if (config.deliveryCreditsMode === "enforced") {
+    if (
+      !config.deliveryCreditHmacSecret ||
+      Buffer.byteLength(config.deliveryCreditHmacSecret, "utf8") < 32
+    ) {
+      throw new Error(
+        "DELIVERY_CREDIT_HMAC_SECRET must contain at least 32 bytes",
+      );
+    }
+    if (!config.upstashRedisRestUrl || !config.upstashRedisRestToken) {
+      throw new Error(
+        "Enforced delivery credits require Upstash Redis REST credentials",
+      );
+    }
   }
   if (config.paymentsMode !== "off" && !config.treasuryAddress) {
     throw new Error("TREASURY_ADDRESS is required when x402 payments are enabled");

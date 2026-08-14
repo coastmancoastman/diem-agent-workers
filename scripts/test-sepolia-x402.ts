@@ -168,7 +168,10 @@ async function main(): Promise<void> {
   try {
     const request = {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": `x402-${buyer.address}`,
+      },
       body: JSON.stringify(extractJsonExample),
     } satisfies RequestInit;
 

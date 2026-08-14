@@ -36,6 +36,11 @@ export interface TelemetrySummary {
     failed: number;
     settledRevenueUsd: number;
   };
+  deliveryCredits: {
+    redeemed: number;
+    rejected: number;
+    byReason: Record<string, number>;
+  };
   workers: Record<string, WorkerTelemetrySummary>;
 }
 
@@ -126,6 +131,11 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
     bySurface: {} as Record<string, number>,
   };
   const payments = { settled: 0, failed: 0, settledRevenueUsd: 0 };
+  const deliveryCredits = {
+    redeemed: 0,
+    rejected: 0,
+    byReason: {} as Record<string, number>,
+  };
   const recordBundledWorkerOutcome = (event: StoredEvent) => {
     if (typeof event.worker !== "string" || typeof event.model !== "string") {
       return;
@@ -201,6 +211,17 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
     if (event.event === "x402_payment_failed") {
       payments.failed += 1;
       recordBundledWorkerOutcome(event);
+      continue;
+    }
+    if (event.event === "delivery_credit_redeemed") {
+      deliveryCredits.redeemed += 1;
+      continue;
+    }
+    if (event.event === "delivery_credit_rejected") {
+      deliveryCredits.rejected += 1;
+      const reason = typeof event.reason === "string" ? event.reason : "unknown";
+      deliveryCredits.byReason[reason] =
+        (deliveryCredits.byReason[reason] ?? 0) + 1;
     }
   }
 
@@ -229,6 +250,7 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
       ...payments,
       settledRevenueUsd: roundMoney(payments.settledRevenueUsd),
     },
+    deliveryCredits,
     workers: publicWorkers,
   };
 }

@@ -245,6 +245,6 @@ describe("machine-first HTTP API", () => {
     expect(response.headers["content-type"]).toContain("text/event-stream");
     expect(response.text).toContain('"serverInfo"');
     expect(response.text).toContain('"name":"diem-agent-workers"');
-    expect(response.text).toContain('"version":"0.3.0"');
+    expect(response.text).toContain(`"version":"${SERVICE_VERSION}"`);
   });
 });
