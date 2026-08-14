@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DIEM Agent Workers API",
-    "version": "0.6.0",
+    "version": "0.6.1",
     "description": "Machine-first x402 micro-workers powered by private Venice models. Not affiliated with or endorsed by Venice.ai.",
     "termsOfService": "https://api.example.com/terms"
   },

@@ -1,8 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { MemoryAggregateMetricsStore } from "../src/aggregate-metrics-store.js";
+import {
+  aggregateMetricsSnapshotFromRedisHash,
+  MemoryAggregateMetricsStore,
+} from "../src/aggregate-metrics-store.js";
 import { WORKERS } from "../src/constants.js";
 
 describe("privacy-safe aggregate metrics", () => {
+  it("reads Upstash raw HGETALL array responses", () => {
+    const result = aggregateMetricsSnapshotFromRedisHash([
+      "runs",
+      "1",
+      "runs:completed",
+      "1",
+      `worker:${WORKERS.extractJson.id}:runs`,
+      "1",
+      `worker:${WORKERS.extractJson.id}:runs:completed`,
+      "1",
+      "settled_jobs",
+      "1",
+      "settled_revenue_micro_usdc",
+      "20000",
+      `worker:${WORKERS.extractJson.id}:settled_jobs`,
+      "1",
+      `worker:${WORKERS.extractJson.id}:settled_revenue_micro_usdc`,
+      "20000",
+    ]);
+
+    expect(result.totals).toMatchObject({
+      runs: 1,
+      completedRuns: 1,
+      settledJobs: 1,
+      settledRevenueUsd: "0.020000",
+    });
+    expect(
+      result.workers.find((worker) => worker.worker === WORKERS.extractJson.id),
+    ).toMatchObject({
+      runs: 1,
+      completedRuns: 1,
+      settledJobs: 1,
+      settledRevenueUsd: "0.020000",
+    });
+  });
+
   it("keeps only lifetime bounded-cardinality counters", async () => {
     const store = new MemoryAggregateMetricsStore();
     await store.recordRun({
