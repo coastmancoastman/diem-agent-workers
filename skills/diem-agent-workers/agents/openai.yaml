@@ -1,0 +1,4 @@
+interface:
+  display_name: "DIEM Agent Workers"
+  short_description: "Cheap bounded x402 micro-workers for agents"
+  default_prompt: "Use $diem-agent-workers to select and quote the cheapest suitable bounded worker for this task."

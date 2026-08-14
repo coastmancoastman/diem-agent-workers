@@ -1,0 +1,4 @@
+interface:
+  display_name: "Extract Text to JSON"
+  short_description: "Turn supplied text into schema-valid JSON"
+  default_prompt: "Use $extract-text-to-json to convert this supplied text into validated structured JSON."

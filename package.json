@@ -1,0 +1,66 @@
+{
+  "name": "diem-agent-workers",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Machine-discoverable micro-workers powered by Venice compute, paid in USDC, with a DIEM-only reinvestment treasury.",
+  "homepage": "https://diem-agent-workers.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coastmancoastman/diem-agent-workers.git"
+  },
+  "bugs": {
+    "url": "https://github.com/coastmancoastman/diem-agent-workers/issues"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/src/server.js",
+    "mcp": "node dist/src/mcp-cli.js",
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:sepolia": "tsx scripts/test-sepolia-x402.ts",
+    "test:sepolia:all": "tsx scripts/test-sepolia-all-workers.ts",
+    "eval:text": "tsx scripts/evaluate-text-models.ts",
+    "smoke:media": "tsx scripts/smoke-media-workers.ts",
+    "test:watch": "vitest",
+    "credentials:import-cdp": "tsx scripts/import-cdp-key.ts",
+    "wallet:create": "tsx scripts/create-treasury-wallet.ts",
+    "wallet:import": "tsx scripts/import-treasury-wallet.ts",
+    "wallet:verify": "tsx scripts/verify-treasury-wallet.ts",
+    "treasury:run": "tsx src/treasury/run.ts",
+    "generate:openapi": "tsx scripts/generate-openapi.ts"
+  },
+  "bin": {
+    "diem-agent-workers-mcp": "dist/src/mcp-cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@coinbase/cdp-sdk": "^1.55.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@x402/core": "^2.22.0",
+    "@x402/evm": "^2.22.0",
+    "@x402/express": "^2.22.0",
+    "@x402/extensions": "^2.22.0",
+    "@x402/fetch": "2.22.0",
+    "@x402/svm": "^2.22.0",
+    "ajv": "^8.20.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
+    "helmet": "^8.3.0",
+    "viem": "^2.55.13",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

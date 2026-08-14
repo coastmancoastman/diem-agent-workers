@@ -1,0 +1,566 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DIEM Agent Workers API",
+    "version": "0.2.0",
+    "description": "Machine-first x402 micro-workers powered by private Venice models. Not affiliated with or endorsed by Venice.ai."
+  },
+  "servers": [
+    {
+      "url": "https://api.example.com"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Check service health",
+        "responses": {
+          "200": {
+            "description": "Healthy"
+          }
+        }
+      }
+    },
+    "/v1/catalog": {
+      "get": {
+        "operationId": "listWorkers",
+        "summary": "List workers, prices, schemas, and constraints",
+        "responses": {
+          "200": {
+            "description": "Worker catalog"
+          }
+        }
+      }
+    },
+    "/.well-known/agent-catalog.json": {
+      "get": {
+        "operationId": "discoverWorkers",
+        "summary": "Well-known alias for the agent worker catalog",
+        "responses": {
+          "200": {
+            "description": "Worker catalog"
+          }
+        }
+      }
+    },
+    "/a2a": {
+      "post": {
+        "operationId": "a2aSendMessage",
+        "summary": "A2A 1.0 JSON-RPC SendMessage adapter",
+        "description": "Accepts one JSON data part containing worker and input. The adapter is fixed-price and excludes large base64 transcription jobs.",
+        "responses": {
+          "200": {
+            "description": "A2A completed task"
+          },
+          "400": {
+            "description": "JSON-RPC or A2A validation error; no payment requested"
+          },
+          "402": {
+            "description": "x402 payment required"
+          },
+          "503": {
+            "description": "Provider unavailable"
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "operationId": "mcp",
+        "summary": "Stateless Streamable HTTP MCP discovery server",
+        "description": "Free tools list workers, quote exact prices, and prepare x402 calls without receiving wallet private keys.",
+        "responses": {
+          "200": {
+            "description": "MCP JSON-RPC response"
+          }
+        }
+      }
+    },
+    "/v1/jobs/extract-json": {
+      "post": {
+        "operationId": "extract_text_to_json",
+        "summary": "Extract facts from supplied text into a caller-provided strict JSON Schema. Use for bounded text-to-JSON normalization when every output field must be machine-validated.",
+        "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40000,
+                    "description": "Untrusted source text, treated as data rather than instructions."
+                  },
+                  "schema": {
+                    "type": "object",
+                    "description": "Strict JSON Schema: object root, every property required, and additionalProperties=false on every object."
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "source",
+                  "schema"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "source": "The Acme Trail Mug is drinkware and costs $18.50.",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "category": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "price_usd": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "category",
+                    "price_usd"
+                  ],
+                  "additionalProperties": false
+                },
+                "instructions": "Use the displayed price."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed worker result",
+            "content": {
+              "application/json": {
+                "example": {
+                  "worker": "extract_text_to_json",
+                  "result": {
+                    "name": "Acme Trail Mug",
+                    "category": "drinkware",
+                    "price_usd": 18.5
+                  },
+                  "validation": {
+                    "valid": true
+                  },
+                  "provider": {
+                    "name": "venice",
+                    "model": "venice-uncensored-1-2"
+                  },
+                  "usage": {
+                    "inputTokens": 200,
+                    "outputTokens": 35,
+                    "totalTokens": 235
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input; no payment requested"
+          },
+          "402": {
+            "description": "x402 payment required"
+          },
+          "413": {
+            "description": "Payload too large; no payment requested"
+          },
+          "503": {
+            "description": "Provider capacity or required model unavailable; no payment requested"
+          }
+        }
+      }
+    },
+    "/v1/jobs/classify-text": {
+      "post": {
+        "operationId": "classify_text",
+        "summary": "Classify bounded text into exactly one caller-supplied label and return a short evidence-grounded rationale.",
+        "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  },
+                  "labels": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 12,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 50
+                    }
+                  }
+                },
+                "required": [
+                  "source",
+                  "labels"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "source": "The customer asks for a refund after receiving a damaged mug.",
+                "labels": [
+                  "billing",
+                  "refund",
+                  "technical_support"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed worker result",
+            "content": {
+              "application/json": {
+                "example": {
+                  "worker": "classify_text",
+                  "result": {
+                    "label": "refund",
+                    "rationale": "The customer explicitly requests a refund.",
+                    "confidence": 0.98
+                  },
+                  "validation": {
+                    "valid": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input; no payment requested"
+          },
+          "402": {
+            "description": "x402 payment required"
+          },
+          "413": {
+            "description": "Payload too large; no payment requested"
+          },
+          "503": {
+            "description": "Provider capacity or required model unavailable; no payment requested"
+          }
+        }
+      }
+    },
+    "/v1/jobs/summarize-text": {
+      "post": {
+        "operationId": "summarize_text",
+        "summary": "Summarize bounded source text into a structured abstract and key points without web access or invented facts.",
+        "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40000
+                  },
+                  "maxKeyPoints": {
+                    "type": "integer",
+                    "minimum": 3,
+                    "maximum": 10,
+                    "default": 5
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "source": "A short product meeting transcript discussing launch timing, risks, and owners.",
+                "maxKeyPoints": 5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed worker result",
+            "content": {
+              "application/json": {
+                "example": {
+                  "worker": "summarize_text",
+                  "result": {
+                    "abstract": "The team reviewed launch timing and risks.",
+                    "keyPoints": [
+                      "Launch owner assigned",
+                      "Risk review scheduled"
+                    ]
+                  },
+                  "validation": {
+                    "valid": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input; no payment requested"
+          },
+          "402": {
+            "description": "x402 payment required"
+          },
+          "413": {
+            "description": "Payload too large; no payment requested"
+          },
+          "503": {
+            "description": "Provider capacity or required model unavailable; no payment requested"
+          }
+        }
+      }
+    },
+    "/v1/jobs/text-to-speech": {
+      "post": {
+        "operationId": "text_to_speech",
+        "summary": "Convert up to 1,000 characters of text into MP3 speech using a bounded private Venice voice model.",
+        "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "voice": {
+                    "type": "string",
+                    "enum": [
+                      "af_heart",
+                      "af_sky",
+                      "am_adam",
+                      "am_michael",
+                      "bf_emma",
+                      "bm_george"
+                    ],
+                    "default": "af_heart"
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.75,
+                    "maximum": 1.5,
+                    "default": 1
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "text": "Your report is ready.",
+                "voice": "af_heart",
+                "speed": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed worker result",
+            "content": {
+              "application/json": {
+                "example": {
+                  "worker": "text_to_speech",
+                  "result": {
+                    "base64": "<base64 mp3>",
+                    "mediaType": "audio/mpeg",
+                    "bytes": 12345
+                  },
+                  "provider": {
+                    "name": "venice",
+                    "model": "tts-kokoro"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input; no payment requested"
+          },
+          "402": {
+            "description": "x402 payment required"
+          },
+          "413": {
+            "description": "Payload too large; no payment requested"
+          },
+          "503": {
+            "description": "Provider capacity or required model unavailable; no payment requested"
+          }
+        }
+      }
+    },
+    "/v1/jobs/generate-draft-image": {
+      "post": {
+        "operationId": "generate_draft_image",
+        "summary": "Generate one safe-mode 1024px WebP draft image from a bounded prompt, with search and prompt enhancement disabled.",
+        "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1500
+                  },
+                  "negativePrompt": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "prompt"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "prompt": "A clean isometric robot storefront icon on a white background."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed worker result",
+            "content": {
+              "application/json": {
+                "example": {
+                  "worker": "generate_draft_image",
+                  "result": {
+                    "base64": "<base64 webp>",
+                    "mediaType": "image/webp",
+                    "bytes": 234567
+                  },
+                  "provider": {
+                    "name": "venice",
+                    "model": "venice-sd35"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input; no payment requested"
+          },
+          "402": {
+            "description": "x402 payment required"
+          },
+          "413": {
+            "description": "Payload too large; no payment requested"
+          },
+          "503": {
+            "description": "Provider capacity or required model unavailable; no payment requested"
+          }
+        }
+      }
+    },
+    "/v1/jobs/transcribe-audio": {
+      "post": {
+        "operationId": "transcribe_audio",
+        "summary": "Transcribe a base64-encoded PCM WAV clip of at most 60 seconds into text. Input duration is verified before payment.",
+        "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "audioBase64": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 3800000,
+                    "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+                    "description": "Canonical base64 containing a PCM WAV file of at most 60 seconds."
+                  },
+                  "language": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2}$"
+                  }
+                },
+                "required": [
+                  "audioBase64"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "audioBase64": "UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==",
+                "language": "en"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed worker result",
+            "content": {
+              "application/json": {
+                "example": {
+                  "worker": "transcribe_audio",
+                  "result": {
+                    "text": "Your report is ready.",
+                    "durationSeconds": 1.4
+                  },
+                  "validation": {
+                    "valid": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input; no payment requested"
+          },
+          "402": {
+            "description": "x402 payment required"
+          },
+          "413": {
+            "description": "Payload too large; no payment requested"
+          },
+          "503": {
+            "description": "Provider capacity or required model unavailable; no payment requested"
+          }
+        }
+      }
+    }
+  }
+}
