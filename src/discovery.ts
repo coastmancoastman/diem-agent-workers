@@ -238,6 +238,12 @@ export function catalog(config: AppConfig) {
       network: config.paymentsMode === "development" ? BASE_SEPOLIA_CAIP2 : BASE_CAIP2,
       currency: "USDC",
       prepaymentSafety: ["input_validation", "provider_capacity", "model_availability"],
+      deliveryProtection: {
+        mode: config.deliveryCreditsMode,
+        header: "Idempotency-Key",
+        retentionSeconds: config.deliveryCreditTtlSeconds,
+        persistedContent: false,
+      },
     },
     computeBudget: {
       provider: "venice",
@@ -315,6 +321,19 @@ export function agentCard(config: AppConfig) {
 }
 
 export function openApiDocument(config: AppConfig) {
+  const idempotencyParameter = {
+    name: "Idempotency-Key",
+    in: "header",
+    required: false,
+    description:
+      "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+    schema: {
+      type: "string",
+      minLength: 16,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9._:-]+$",
+    },
+  };
   const paths: Record<string, unknown> = {
     "/health": {
       get: { operationId: "health", summary: "Check service health", responses: { "200": { description: "Healthy" } } },
@@ -330,10 +349,13 @@ export function openApiDocument(config: AppConfig) {
         operationId: "a2aSendMessage",
         summary: "A2A 1.0 JSON-RPC SendMessage adapter",
         description: "Accepts one JSON data part containing worker and input. The adapter is fixed-price and excludes large base64 transcription jobs.",
+        parameters: [idempotencyParameter],
         responses: {
           "200": { description: "A2A completed task" },
           "400": { description: "JSON-RPC or A2A validation error; no payment requested" },
           "402": { description: "x402 payment required" },
+          "409": { description: "Idempotency key conflict, in flight, or already consumed" },
+          "428": { description: "A signed paid attempt omitted Idempotency-Key" },
           "503": { description: "Provider unavailable" },
         },
       },
@@ -354,6 +376,7 @@ export function openApiDocument(config: AppConfig) {
         operationId: worker.id,
         summary: worker.description,
         description: "Input and provider readiness are checked before x402 payment is requested.",
+        parameters: [idempotencyParameter],
         requestBody: {
           required: true,
           content: { "application/json": { schema: contract.inputSchema, example: contract.input } },
@@ -362,7 +385,9 @@ export function openApiDocument(config: AppConfig) {
           "200": { description: "Completed worker result", content: { "application/json": { example: contract.output } } },
           "400": { description: "Invalid input; no payment requested" },
           "402": { description: "x402 payment required" },
+          "409": { description: "Idempotency key conflict, in flight, or already consumed" },
           "413": { description: "Payload too large; no payment requested" },
+          "428": { description: "A signed paid attempt omitted Idempotency-Key" },
           "503": { description: "Provider capacity or required model unavailable; no payment requested" },
         },
       },
@@ -384,5 +409,5 @@ export function llmsText(config: AppConfig): string {
   const workers = Object.values(WORKERS)
     .map((worker) => `## ${worker.id}\n\n${worker.description}\n\n- Endpoint: POST ${config.publicBaseUrl}${worker.path}\n- Free quote: POST ${config.publicBaseUrl}/v1/quote/${worker.id}\n- Price: $${workerPrice(config, worker.id).toFixed(3)} USDC\n- Tags: ${workerContracts[worker.id].tags.join(", ")}`)
     .join("\n\n");
-  return `# DIEM Agent Workers\n\n> Bounded micro-workers for autonomous software agents, paid with USDC through x402 and powered by private Venice models.\n\n## Discovery\n\n- [Catalog](${config.publicBaseUrl}/v1/catalog)\n- [Well-known catalog](${config.publicBaseUrl}/.well-known/agent-catalog.json)\n- [OpenAPI](${config.publicBaseUrl}/openapi.json)\n- [A2A Agent Card](${config.publicBaseUrl}/.well-known/agent-card.json)\n- [MCP Streamable HTTP server](${config.publicBaseUrl}/mcp)\n- [Health](${config.publicBaseUrl}/health)\n\nEvery job is input-validated and provider-capacity-checked before payment. Request bodies are not intentionally logged or persisted. Web search and scraping are disabled.\n\n${workers}\n\nVenice compute cap: ${config.veniceDiemEpochCap.toFixed(2)} DIEM per EPOCH, reset at 00:00 UTC and enforced by the provider API key. Revenue policy: settled USDC is eligible only for conversion to the official Venice DIEM token on Base; conversion and staking remain disabled unless separately authorized.\n`;
+  return `# DIEM Agent Workers\n\n> Bounded micro-workers for autonomous software agents, paid with USDC through x402 and powered by private Venice models.\n\n## Discovery\n\n- [Catalog](${config.publicBaseUrl}/v1/catalog)\n- [Well-known catalog](${config.publicBaseUrl}/.well-known/agent-catalog.json)\n- [OpenAPI](${config.publicBaseUrl}/openapi.json)\n- [A2A Agent Card](${config.publicBaseUrl}/.well-known/agent-card.json)\n- [MCP Streamable HTTP server](${config.publicBaseUrl}/mcp)\n- [Health](${config.publicBaseUrl}/health)\n\nEvery job is input-validated and provider-capacity-checked before payment. When delivery protection is enforced, signed paid attempts must carry an unpredictable Idempotency-Key and interrupted deliveries receive one matching retry. Only HMAC fingerprints and state are persisted; request and provider bodies are not logged or persisted. Web search and scraping are disabled.\n\n${workers}\n\nVenice compute cap: ${config.veniceDiemEpochCap.toFixed(2)} DIEM per EPOCH, reset at 00:00 UTC and enforced by the provider API key. Revenue policy: settled USDC is eligible only for conversion to the official Venice DIEM token on Base; conversion and staking remain disabled unless separately authorized.\n`;
 }

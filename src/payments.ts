@@ -19,11 +19,17 @@ import {
   paymentTelemetryContextFromTransport,
   suppressX402ExtensionResponseDiagnostics,
 } from "./payment-telemetry.js";
+import {
+  deliveryCreditContextFromTransport,
+  deliveryCreditMiddleware,
+} from "./delivery-credits.js";
+import type { DeliveryCreditStore } from "./delivery-credit-store.js";
 
 export async function attachPaymentMiddleware(
   app: Express,
   config: AppConfig,
   telemetry: TelemetrySink,
+  deliveryCreditStore?: DeliveryCreditStore,
 ): Promise<void> {
   if (config.paymentsMode === "off") return;
   if (!config.treasuryAddress) {
@@ -80,7 +86,92 @@ export async function attachPaymentMiddleware(
     routes,
   });
 
+  if (deliveryCreditStore) {
+    server.resourceServer.onAfterVerify(async ({ transportContext }) => {
+      const context = deliveryCreditContextFromTransport(config, transportContext);
+      if (!context) {
+        return {
+          abort: true,
+          reason: "delivery_credit_context_missing",
+          message: "A valid Idempotency-Key is required",
+        };
+      }
+      try {
+        const result = await deliveryCreditStore.beginVerified(context, Date.now());
+        if (result === "started") return;
+        return {
+          abort: true,
+          reason: `delivery_credit_${result}`,
+          message: "The idempotency key cannot start another paid request",
+        };
+      } catch {
+        return {
+          abort: true,
+          reason: "delivery_credit_store_unavailable",
+          message: "Paid delivery protection is temporarily unavailable",
+        };
+      }
+    });
+    server.resourceServer.onBeforeSettle(async ({ transportContext }) => {
+      const context = deliveryCreditContextFromTransport(config, transportContext);
+      if (!context) {
+        return {
+          abort: true,
+          reason: "delivery_credit_context_missing",
+          message: "Paid delivery protection is unavailable",
+        };
+      }
+      try {
+        if (await deliveryCreditStore.isSettlementReady(context, Date.now())) return;
+      } catch {
+        // Fall through to the fail-closed settlement abort below.
+      }
+      return {
+        abort: true,
+        reason: "delivery_credit_not_ready",
+        message: "Paid delivery protection is unavailable",
+      };
+    });
+    server.resourceServer.onAfterSettle(async ({ transportContext }) => {
+      const context = deliveryCreditContextFromTransport(config, transportContext);
+      if (!context) throw new Error("Delivery credit context missing after settlement");
+      const recorded = await deliveryCreditStore.markSettled(context, Date.now());
+      if (!recorded) {
+        throw new Error("Delivery credit settlement transition failed");
+      }
+    });
+    server.resourceServer.onVerifiedPaymentCanceled(
+      async ({ transportContext, settledPhases }) => {
+        const context = deliveryCreditContextFromTransport(config, transportContext);
+        if (!context) return;
+        await deliveryCreditStore.cancelVerified(
+          context,
+          settledPhases.length > 0,
+          Date.now(),
+        );
+      },
+    );
+  }
+
   server.resourceServer.onSettleFailure(async ({ phase, transportContext }) => {
+    if (deliveryCreditStore) {
+      const creditContext = deliveryCreditContextFromTransport(
+        config,
+        transportContext,
+      );
+      if (creditContext) {
+        try {
+          await deliveryCreditStore.cancelVerified(
+            creditContext,
+            false,
+            Date.now(),
+          );
+        } catch {
+          // The short lease prevents a storage outage from permanently
+          // consuming a retry. Payment failure telemetry still proceeds.
+        }
+      }
+    }
     if (phase === "cancel") return;
     const context = paymentTelemetryContextFromTransport(config, transportContext);
     if (!context) return;
@@ -95,9 +186,17 @@ export async function attachPaymentMiddleware(
   // declarations currently resolve the private base field through a separate
   // type path, so TypeScript cannot prove the documented compatibility.
   app.use(paymentResponseTelemetryMiddleware(config, telemetry));
-  app.use(
-    paymentMiddlewareFromHTTPServer(
-      server as unknown as x402HTTPResourceServer,
-    ),
+  if (deliveryCreditStore) {
+    app.use(deliveryCreditMiddleware(config, deliveryCreditStore, telemetry));
+  }
+  const paymentHandler = paymentMiddlewareFromHTTPServer(
+    server as unknown as x402HTTPResourceServer,
   );
+  app.use((req, res, next) => {
+    if (res.locals.deliveryCreditRetry === true) {
+      next();
+      return;
+    }
+    return paymentHandler(req, res, next);
+  });
 }

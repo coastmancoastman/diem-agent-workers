@@ -6,6 +6,7 @@ describe("configuration safety", () => {
   it("defaults to unpaid development and a disabled treasury", () => {
     const config = loadConfig({ APP_ENV: "test" });
     expect(config.paymentsMode).toBe("off");
+    expect(config.deliveryCreditsMode).toBe("off");
     expect(config.treasuryMode).toBe("disabled");
     expect(config.publicBaseUrl).toBe("http://localhost:8402");
     expect(config.veniceBaseUrl).toBe("https://api.venice.ai/api/v1");
@@ -46,6 +47,38 @@ describe("configuration safety", () => {
     expect(() => loadConfig({ APP_ENV: "production", PAYMENTS_MODE: "off" })).toThrow(
       /PAYMENTS_MODE=production/,
     );
+  });
+
+  it("requires durable delivery credits before production payments", () => {
+    const productionPayments = {
+      APP_ENV: "production",
+      PAYMENTS_MODE: "production",
+      TREASURY_ADDRESS: "0x1111111111111111111111111111111111111111",
+      VENICE_API_KEY: "test",
+      CDP_API_KEY_ID: "test",
+      CDP_API_KEY_SECRET: "test",
+    };
+    expect(() => loadConfig(productionPayments)).toThrow(
+      /DELIVERY_CREDITS_MODE=enforced/,
+    );
+    expect(() =>
+      loadConfig({
+        ...productionPayments,
+        DELIVERY_CREDITS_MODE: "enforced",
+        DELIVERY_CREDIT_HMAC_SECRET: "too-short",
+        UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
+        UPSTASH_REDIS_REST_TOKEN: "test",
+      }),
+    ).toThrow(/at least 32 bytes/);
+    expect(() =>
+      loadConfig({
+        ...productionPayments,
+        DELIVERY_CREDITS_MODE: "enforced",
+        DELIVERY_CREDIT_HMAC_SECRET: "x".repeat(32),
+        UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
+        UPSTASH_REDIS_REST_TOKEN: "test",
+      }),
+    ).not.toThrow();
   });
 
   it("requires a signer and exact acknowledgement for live reinvestment", () => {

@@ -1,6 +1,6 @@
 {
   "name": "diem-agent-workers",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.19.0",
@@ -42,6 +42,7 @@
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@upstash/redis": "1.38.2",
     "@x402/core": "^2.22.0",
     "@x402/evm": "^2.22.0",
     "@x402/express": "^2.22.0",

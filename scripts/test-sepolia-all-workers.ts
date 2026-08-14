@@ -203,7 +203,10 @@ async function main(): Promise<void> {
     const endpoint = `${publicBaseUrl}${testCase.path}`;
     const request = {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": `x402-${buyer.address}-${index}`,
+      },
       body: JSON.stringify(testCase.body),
     } satisfies RequestInit;
     const unpaid = await fetch(endpoint, request);

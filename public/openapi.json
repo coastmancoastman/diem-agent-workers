@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DIEM Agent Workers API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Machine-first x402 micro-workers powered by private Venice models. Not affiliated with or endorsed by Venice.ai."
   },
   "servers": [
@@ -49,6 +49,20 @@
         "operationId": "a2aSendMessage",
         "summary": "A2A 1.0 JSON-RPC SendMessage adapter",
         "description": "Accepts one JSON data part containing worker and input. The adapter is fixed-price and excludes large base64 transcription jobs.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "A2A completed task"
@@ -58,6 +72,12 @@
           },
           "402": {
             "description": "x402 payment required"
+          },
+          "409": {
+            "description": "Idempotency key conflict, in flight, or already consumed"
+          },
+          "428": {
+            "description": "A signed paid attempt omitted Idempotency-Key"
           },
           "503": {
             "description": "Provider unavailable"
@@ -82,6 +102,20 @@
         "operationId": "extract_text_to_json",
         "summary": "Extract facts from supplied text into a caller-provided strict JSON Schema. Use for bounded text-to-JSON normalization when every output field must be machine-validated.",
         "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -180,8 +214,14 @@
           "402": {
             "description": "x402 payment required"
           },
+          "409": {
+            "description": "Idempotency key conflict, in flight, or already consumed"
+          },
           "413": {
             "description": "Payload too large; no payment requested"
+          },
+          "428": {
+            "description": "A signed paid attempt omitted Idempotency-Key"
           },
           "503": {
             "description": "Provider capacity or required model unavailable; no payment requested"
@@ -194,6 +234,20 @@
         "operationId": "classify_text",
         "summary": "Classify bounded text into exactly one caller-supplied label and return a short evidence-grounded rationale.",
         "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -260,8 +314,14 @@
           "402": {
             "description": "x402 payment required"
           },
+          "409": {
+            "description": "Idempotency key conflict, in flight, or already consumed"
+          },
           "413": {
             "description": "Payload too large; no payment requested"
+          },
+          "428": {
+            "description": "A signed paid attempt omitted Idempotency-Key"
           },
           "503": {
             "description": "Provider capacity or required model unavailable; no payment requested"
@@ -274,6 +334,20 @@
         "operationId": "summarize_text",
         "summary": "Summarize bounded source text into a structured abstract and key points without web access or invented facts.",
         "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -332,8 +406,14 @@
           "402": {
             "description": "x402 payment required"
           },
+          "409": {
+            "description": "Idempotency key conflict, in flight, or already consumed"
+          },
           "413": {
             "description": "Payload too large; no payment requested"
+          },
+          "428": {
+            "description": "A signed paid attempt omitted Idempotency-Key"
           },
           "503": {
             "description": "Provider capacity or required model unavailable; no payment requested"
@@ -346,6 +426,20 @@
         "operationId": "text_to_speech",
         "summary": "Convert up to 1,000 characters of text into MP3 speech using a bounded private Venice voice model.",
         "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -416,8 +510,14 @@
           "402": {
             "description": "x402 payment required"
           },
+          "409": {
+            "description": "Idempotency key conflict, in flight, or already consumed"
+          },
           "413": {
             "description": "Payload too large; no payment requested"
+          },
+          "428": {
+            "description": "A signed paid attempt omitted Idempotency-Key"
           },
           "503": {
             "description": "Provider capacity or required model unavailable; no payment requested"
@@ -430,6 +530,20 @@
         "operationId": "generate_draft_image",
         "summary": "Generate one safe-mode 1024px WebP draft image from a bounded prompt, with search and prompt enhancement disabled.",
         "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -484,8 +598,14 @@
           "402": {
             "description": "x402 payment required"
           },
+          "409": {
+            "description": "Idempotency key conflict, in flight, or already consumed"
+          },
           "413": {
             "description": "Payload too large; no payment requested"
+          },
+          "428": {
+            "description": "A signed paid attempt omitted Idempotency-Key"
           },
           "503": {
             "description": "Provider capacity or required model unavailable; no payment requested"
@@ -498,6 +618,20 @@
         "operationId": "transcribe_audio",
         "summary": "Transcribe a base64-encoded PCM WAV clip of at most 60 seconds into text. Input duration is verified before payment.",
         "description": "Input and provider readiness are checked before x402 payment is requested.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Required on a signed paid attempt when delivery protection is enforced. Use one unpredictable 16-128 character value per logical job and reuse it only with the identical payment authorization and request.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -553,8 +687,14 @@
           "402": {
             "description": "x402 payment required"
           },
+          "409": {
+            "description": "Idempotency key conflict, in flight, or already consumed"
+          },
           "413": {
             "description": "Payload too large; no payment requested"
+          },
+          "428": {
+            "description": "A signed paid attempt omitted Idempotency-Key"
           },
           "503": {
             "description": "Provider capacity or required model unavailable; no payment requested"

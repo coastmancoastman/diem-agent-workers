@@ -24,6 +24,13 @@ export type TelemetryErrorClass =
   | "payment_failed"
   | "internal_error";
 
+export type DeliveryCreditRejectionReason =
+  | "conflict"
+  | "consumed"
+  | "exhausted"
+  | "in_flight"
+  | "store_unavailable";
+
 export type TelemetryEvent =
   | {
       event: "request_completed";
@@ -71,6 +78,15 @@ export type TelemetryEvent =
       workerDurationMs?: number;
       estimatedDiemCost?: number;
       estimatedGrossMarginUsd?: number;
+    }
+  | {
+      event: "delivery_credit_redeemed";
+      worker: WorkerId;
+    }
+  | {
+      event: "delivery_credit_rejected";
+      worker: WorkerId;
+      reason: DeliveryCreditRejectionReason;
     };
 
 export interface TelemetrySink {
@@ -191,6 +207,10 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): Record<string, un
           ? { estimatedGrossMarginUsd: signedMoney(event.estimatedGrossMarginUsd) }
           : {}),
       };
+    case "delivery_credit_redeemed":
+      return { ...base, worker: event.worker };
+    case "delivery_credit_rejected":
+      return { ...base, worker: event.worker, reason: event.reason };
   }
 }
 

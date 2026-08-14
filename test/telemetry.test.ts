@@ -213,4 +213,23 @@ describe("privacy-preserving telemetry", () => {
       p50DurationMs: 325,
     });
   });
+
+  it("reports delivery-credit redemption without persisting an identifier", () => {
+    const redeemed = sanitizeTelemetryEvent({
+      event: "delivery_credit_redeemed",
+      worker: WORKERS.extractJson.id,
+    });
+    const rejected = sanitizeTelemetryEvent({
+      event: "delivery_credit_rejected",
+      worker: WORKERS.extractJson.id,
+      reason: "store_unavailable",
+    });
+    const report = summarizeTelemetry([redeemed, rejected]);
+    expect(report.deliveryCredits).toEqual({
+      redeemed: 1,
+      rejected: 1,
+      byReason: { store_unavailable: 1 },
+    });
+    expect(JSON.stringify([redeemed, rejected])).not.toContain("fingerprint");
+  });
 });

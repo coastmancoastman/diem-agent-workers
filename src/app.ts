@@ -47,6 +47,10 @@ import {
   type CostEstimateInput,
   type CostEstimator,
 } from "./costs.js";
+import {
+  createDeliveryCreditStore,
+  type DeliveryCreditStore,
+} from "./delivery-credit-store.js";
 
 export type Extractor = typeof extractJsonWithVenice;
 
@@ -60,6 +64,7 @@ export interface AppDependencies {
   readiness?: VeniceReadiness;
   telemetry?: TelemetrySink;
   costEstimator?: CostEstimator;
+  deliveryCreditStore?: DeliveryCreditStore;
 }
 
 // Helmet publishes a callable ESM default, but some NodeNext build hosts
@@ -83,6 +88,8 @@ export async function buildApp(
     (config.appEnv === "test" ? new NoopTelemetry() : new JsonConsoleTelemetry());
   const costEstimator =
     dependencies.costEstimator ?? new VeniceCatalogCostEstimator(config);
+  const deliveryCreditStore =
+    dependencies.deliveryCreditStore ?? createDeliveryCreditStore(config);
   try {
     costEstimator.warm?.();
   } catch {
@@ -343,7 +350,7 @@ export async function buildApp(
   if (config.paymentsMode !== "off") {
     app.use(capacityMiddleware(dependencies.readiness ?? new VeniceReadiness(config)));
   }
-  await attachPaymentMiddleware(app, config, telemetry);
+  await attachPaymentMiddleware(app, config, telemetry, deliveryCreditStore);
 
   app.get("/", (_req, res) => {
     res.json({
@@ -365,6 +372,7 @@ export async function buildApp(
       version: SERVICE_VERSION,
       workerReady: Boolean(config.veniceApiKey),
       paymentsMode: config.paymentsMode,
+      deliveryCredits: config.deliveryCreditsMode,
       computeBudget: {
         currency: "DIEM",
         cap: config.veniceDiemEpochCap,
