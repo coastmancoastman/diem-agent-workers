@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DIEM Agent Workers API",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Machine-first x402 micro-workers powered by private Venice models. Not affiliated with or endorsed by Venice.ai.",
     "termsOfService": "https://api.example.com/terms"
   },
@@ -30,6 +30,21 @@
         "responses": {
           "200": {
             "description": "Worker catalog"
+          }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "operationId": "aggregateServiceStats",
+        "summary": "Read lifetime aggregate reliability and settlement counters",
+        "description": "Contains no time series, caller identifiers, request content, or response content.",
+        "responses": {
+          "200": {
+            "description": "Privacy-safe lifetime aggregate counters"
+          },
+          "503": {
+            "description": "Aggregate metrics storage unavailable"
           }
         }
       }

@@ -3,6 +3,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { WORKERS } from "../src/constants.js";
 import { MemoryComputeBudgetStore } from "../src/compute-budget-store.js";
+import { MemoryAggregateMetricsStore } from "../src/aggregate-metrics-store.js";
 import {
   MemoryDeliveryCreditStore,
   type DeliveryCreditContext,
@@ -109,9 +110,11 @@ describe("durable delivery credits", () => {
       observed = candidate;
       return "retry";
     });
+    const budget = new MemoryComputeBudgetStore(0.1);
+    const metrics = new MemoryAggregateMetricsStore();
     const app = express();
     app.use(express.json());
-    app.use(deliveryCreditMiddleware(config, store, telemetry));
+    app.use(deliveryCreditMiddleware(config, store, telemetry, budget, metrics));
     app.post(WORKERS.extractJson.path, (_req, res) => {
       res.locals.telemetryWorkerEvent = { event: "worker_completed" };
       res.json({ ok: true });
@@ -127,6 +130,10 @@ describe("durable delivery credits", () => {
 
     expect(response.headers["x-delivery-credit"]).toBe("redeemed");
     expect(store.markDelivered).toHaveBeenCalledOnce();
+    expect((await metrics.snapshot()).totals).toMatchObject({
+      computeReservations: 1,
+      reservedDiem: "0.020000000",
+    });
     expect(JSON.stringify(observed)).not.toContain(privateSource);
     expect(JSON.stringify(observed)).not.toContain("agent-request-00000001");
     expect(JSON.stringify(observed)).not.toContain(paymentHeader);

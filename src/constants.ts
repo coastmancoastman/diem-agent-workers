@@ -22,7 +22,7 @@ export const ZEROX_QUOTE_URL =
 export const VENICE_DEFAULT_BASE_URL = "https://api.venice.ai/api/v1";
 
 export const TREASURY_LIVE_ACK = "BUY_DIEM_ONLY_ON_BASE";
-export const SERVICE_VERSION = "0.5.0";
+export const SERVICE_VERSION = "0.6.0";
 
 // Text routes keep their useful ASCII character ceilings while separately
 // bounding UTF-8 bytes. Byte ceilings prevent hostile Unicode from expanding

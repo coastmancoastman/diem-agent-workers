@@ -4,6 +4,10 @@ import type { Request, RequestHandler, Response } from "express";
 import type { AppConfig } from "./config.js";
 import { WORKERS, type WorkerId } from "./constants.js";
 import type { ComputeBudgetStore } from "./compute-budget-store.js";
+import {
+  recordAggregateMetric,
+  type AggregateMetricsStore,
+} from "./aggregate-metrics-store.js";
 import { workerPrice } from "./discovery.js";
 import type {
   DeliveryCreditContext,
@@ -158,6 +162,7 @@ export function deliveryCreditMiddleware(
   store: DeliveryCreditStore,
   telemetry: TelemetrySink,
   computeBudgetStore?: ComputeBudgetStore,
+  aggregateMetricsStore?: AggregateMetricsStore,
 ): RequestHandler {
   return async (req, res, next) => {
     const result = requestContext(
@@ -253,6 +258,14 @@ export function deliveryCreditMiddleware(
               resetsAt: reservation.resetsAt,
             });
             return;
+          }
+          if (aggregateMetricsStore) {
+            await recordAggregateMetric(() =>
+              aggregateMetricsStore.recordReservation({
+                worker: result.context.worker,
+                reservedDiem: reservation.reservedDiem,
+              }),
+            );
           }
           emitTelemetry(telemetry, {
             event: "compute_budget_reserved",

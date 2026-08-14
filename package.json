@@ -1,10 +1,10 @@
 {
   "name": "diem-agent-workers",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.19.0",
-  "description": "Machine-discoverable micro-workers powered by Venice compute, paid in USDC, with a DIEM-only reinvestment treasury.",
+  "description": "Privacy-first, machine-discoverable micro-workers powered by private Venice compute and paid in USDC through x402.",
   "homepage": "https://diem-agent-workers.vercel.app",
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
     "test:sepolia": "tsx scripts/test-sepolia-x402.ts",
     "test:sepolia:all": "tsx scripts/test-sepolia-all-workers.ts",
     "test:mainnet": "tsx scripts/test-mainnet-x402.ts",
+    "test:mainnet:all": "MAINNET_X402_TEST_WORKERS=all tsx scripts/test-mainnet-x402.ts",
     "eval:text": "tsx scripts/evaluate-text-models.ts",
     "smoke:media": "tsx scripts/smoke-media-workers.ts",
     "test:watch": "vitest",

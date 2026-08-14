@@ -52,7 +52,10 @@ export function termsDocument(config: AppConfig) {
     },
     privacy: {
       retention:
-        "Request bodies and provider response bodies are not intentionally logged or persisted. Privacy-preserving HMAC fingerprints and aggregate operational telemetry may be retained.",
+        "Request bodies and provider response bodies are not intentionally logged or persisted. Privacy-preserving HMAC fingerprints and lifetime aggregate counters may be retained. Aggregate counters exclude prompts, outputs, payer addresses, transaction hashes, IPs, user agents, request identifiers, and time-series activity.",
+      platformLogs:
+        "Vercel may retain platform and runtime-log timestamps and other infrastructure metadata under its own policies; application telemetry uses an explicit content-free field allowlist.",
+      aggregateStats: `${config.publicBaseUrl}/v1/stats`,
       subprocessors: ["Venice.ai", "Coinbase CDP x402 Facilitator", "Vercel", "Upstash Redis"],
     },
     availability:
