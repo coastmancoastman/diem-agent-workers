@@ -14,6 +14,32 @@ export type PaymentTelemetryContext =
   | { surface: "worker"; worker: WorkerId; priceUsd: number }
   | { surface: "a2a"; priceUsd: number };
 
+const X402_EXTENSION_DIAGNOSTIC_PREFIX = "[x402] extension responses:";
+const filteredConsoles = new WeakSet<object>();
+
+/**
+ * The x402 client logs Bazaar extension status during verification, before a
+ * payment is settled. Some serverless log views retain only that first
+ * console.log call. Suppress exactly that redundant diagnostic so the final,
+ * structured settlement event is the first console.log for a paid request.
+ */
+export function suppressX402ExtensionResponseDiagnostics(
+  target: Pick<Console, "log"> = console,
+): void {
+  if (filteredConsoles.has(target)) return;
+  const originalLog = target.log.bind(target);
+  target.log = (...data: Parameters<Console["log"]>) => {
+    if (
+      typeof data[0] === "string" &&
+      data[0].startsWith(X402_EXTENSION_DIAGNOSTIC_PREFIX)
+    ) {
+      return;
+    }
+    originalLog(...data);
+  };
+  filteredConsoles.add(target);
+}
+
 export function paymentTelemetryContextForPath(
   config: AppConfig,
   path: string,
