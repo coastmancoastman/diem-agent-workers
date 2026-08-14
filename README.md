@@ -37,6 +37,8 @@ Purchased DIEM is not automatically staked in this release. Venice currently dir
 - OpenAPI 3.1, `llms.txt`, A2A 1.0 Agent Card, JSON-RPC `SendMessage`, and Streamable HTTP MCP discovery
 - x402 exact-price USDC payment gating through the CDP Facilitator
 - Rich per-worker x402 Bazaar input/output metadata
+- Official MCP Registry metadata for the public Streamable HTTP server
+- Privacy-preserving operational telemetry and an aggregate margin report
 - Payments sent directly to a dedicated treasury address
 - Quote-only and live USDC-to-DIEM treasury modes
 - Hard-coded Base USDC, Venice DIEM, chain ID, and 0x AllowanceHolder
@@ -220,6 +222,29 @@ The runner does not sell DIEM, withdraw USDC, bridge assets, select arbitrary to
 - x402 Bazaar metadata — automatically attached when payments are enabled
 
 The MCP adapter intentionally does not accept wallet keys. Agents execute prepared calls with their own x402-capable client or use Coinbase's Bazaar MCP server, which can discover indexed x402 resources.
+
+The remote MCP server is described by [`server.json`](server.json) under the `io.github.coastmancoastman/diem-agent-workers` namespace for publication to the official MCP Registry.
+
+## Private storefront telemetry
+
+Production emits one-line JSON events to the server runtime log. The schema is an explicit allowlist: route category, HTTP status, latency, worker, coarse error class, model, exact settled price, and estimated DIEM cost/margin. Cost estimates use Venice's public model-pricing catalog and do not query account balances or billing history.
+
+Telemetry never includes prompts, outputs, prompt length, token counts, raw URLs, request IDs, IP addresses, user agents, headers, payer identities, transaction hashes, provider request IDs, or credentials. Telemetry failure never blocks a worker response.
+
+Create a local aggregate report from a saved JSONL file:
+
+```bash
+pnpm telemetry:report /absolute/path/to/runtime-logs.jsonl
+```
+
+Or report recent production logs from the linked Vercel project:
+
+```bash
+vercel logs --environment production --since 24h --no-branch --json --limit 1000 \
+  | pnpm telemetry:report
+```
+
+The report contains request and payment counts, settled test-USDC revenue, estimated DIEM cost and gross margin, latency percentiles, and coarse failure counts. It cannot reconstruct individual customer content or identity.
 
 ## Security and legal notes
 

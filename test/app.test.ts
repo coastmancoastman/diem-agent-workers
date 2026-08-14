@@ -4,6 +4,7 @@ import { buildApp } from "../src/app.js";
 import { SERVICE_VERSION, WORKERS, WORKER_ID } from "../src/constants.js";
 import { parseTranscribeAudioInput } from "../src/schema.js";
 import type { ExtractJsonResult, JsonWorkerResult } from "../src/venice.js";
+import type { TelemetryEvent } from "../src/telemetry.js";
 import { testConfig, validSchema } from "./helpers.js";
 
 describe("machine-first HTTP API", () => {
@@ -75,6 +76,82 @@ describe("machine-first HTTP API", () => {
       .send({ source: "Ada has 3 cats", schema: validSchema });
     expect(response.status).toBe(200);
     expect(response.body.result).toEqual({ name: "Ada", count: 3 });
+    expect(extractor).toHaveBeenCalledOnce();
+  });
+
+  it("emits aggregate worker telemetry without request or response content", async () => {
+    const events: TelemetryEvent[] = [];
+    const privateSource = "private-customer-source-should-never-appear";
+    const extractor = vi.fn(async (): Promise<ExtractJsonResult> => ({
+      worker: WORKER_ID,
+      result: { name: "private-output-should-never-appear", count: 3 },
+      validation: { valid: true },
+      provider: { name: "venice", model: "test-model" },
+      usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+    }));
+    const app = await buildApp(testConfig(), {
+      extractor,
+      telemetry: { emit: (event) => events.push(event) },
+      costEstimator: { estimate: () => 0.001 },
+    });
+    await request(app)
+      .post(WORKERS.extractJson.path)
+      .set("x-request-id", "private-customer-request-id")
+      .send({ source: privateSource, schema: validSchema })
+      .expect(200);
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "worker_completed",
+          worker: WORKER_ID,
+          model: "test-model",
+          priceUsd: 0.02,
+          estimatedDiemCost: 0.001,
+          estimatedGrossMarginUsd: 0.019,
+        }),
+        expect.objectContaining({
+          event: "request_completed",
+          surface: "worker",
+          statusCode: 200,
+        }),
+      ]),
+    );
+    const serialized = JSON.stringify(events);
+    expect(serialized).not.toContain(privateSource);
+    expect(serialized).not.toContain("private-output-should-never-appear");
+    expect(serialized).not.toContain("private-customer-request-id");
+    expect(serialized).not.toContain("inputTokens");
+  });
+
+  it("never lets telemetry or pricing failures change a worker response", async () => {
+    const extractor = vi.fn(async (): Promise<ExtractJsonResult> => ({
+      worker: WORKER_ID,
+      result: { name: "Ada", count: 3 },
+      validation: { valid: true },
+      provider: { name: "venice", model: "test-model" },
+      usage: {},
+    }));
+    const app = await buildApp(testConfig(), {
+      extractor,
+      telemetry: {
+        emit: () => {
+          throw new Error("telemetry unavailable");
+        },
+      },
+      costEstimator: {
+        warm: () => {
+          throw new Error("pricing unavailable");
+        },
+        estimate: () => {
+          throw new Error("pricing unavailable");
+        },
+      },
+    });
+    await request(app)
+      .post(WORKERS.extractJson.path)
+      .send({ source: "Ada has 3 cats", schema: validSchema })
+      .expect(200);
     expect(extractor).toHaveBeenCalledOnce();
   });
 
@@ -164,6 +241,6 @@ describe("machine-first HTTP API", () => {
     expect(response.headers["content-type"]).toContain("text/event-stream");
     expect(response.text).toContain('"serverInfo"');
     expect(response.text).toContain('"name":"diem-agent-workers"');
-    expect(response.text).toContain('"version":"0.2.0"');
+    expect(response.text).toContain('"version":"0.3.0"');
   });
 });
