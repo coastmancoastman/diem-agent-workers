@@ -2,12 +2,12 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.coastmancoastman/diem-agent-workers",
   "title": "DIEM Agent Workers",
-  "description": "Discover bounded Venice-powered micro-work calls with exact x402 USDC prices.",
+  "description": "Discover privacy-first, bounded Venice-powered micro-work calls with exact x402 USDC prices.",
   "repository": {
     "url": "https://github.com/coastmancoastman/diem-agent-workers",
     "source": "github"
   },
-  "version": "0.5.0",
+  "version": "0.6.0",
   "remotes": [
     {
       "type": "streamable-http",

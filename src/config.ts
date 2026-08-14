@@ -4,6 +4,7 @@ import { TREASURY_LIVE_ACK, VENICE_DEFAULT_BASE_URL } from "./constants.js";
 export type PaymentsMode = "off" | "development" | "production";
 export type DeliveryCreditsMode = "off" | "enforced";
 export type ComputeBudgetMode = "off" | "enforced";
+export type AggregateMetricsMode = "off" | "enabled";
 export type TreasuryMode = "disabled" | "quote" | "live";
 export type TreasuryKeychainBackend = "security-cli" | "native-helper";
 
@@ -124,6 +125,7 @@ export interface AppConfig {
   upstashRedisRestToken?: string;
   computeBudgetMode: ComputeBudgetMode;
   computeBudgetDiemPerDay: number;
+  aggregateMetricsMode: AggregateMetricsMode;
   x402PriceUsd: number;
   x402ClassifyPriceUsd: number;
   x402SummarizePriceUsd: number;
@@ -181,6 +183,12 @@ export function loadConfig(
     "COMPUTE_BUDGET_MODE",
     env.COMPUTE_BUDGET_MODE,
     ["off", "enforced"] as const,
+    "off",
+  );
+  const aggregateMetricsMode = enumValue(
+    "AGGREGATE_METRICS_MODE",
+    env.AGGREGATE_METRICS_MODE,
+    ["off", "enabled"] as const,
     "off",
   );
   const upstashRedisRestUrlValue =
@@ -270,6 +278,7 @@ export function loadConfig(
       0.25,
       { min: 0.01, max: 1_000 },
     ),
+    aggregateMetricsMode,
     x402PriceUsd: numberValue("X402_PRICE_USD", env.X402_PRICE_USD, 0.02, {
       min: 0.001,
       max: 10,
@@ -382,6 +391,14 @@ export function validateConfig(config: AppConfig): void {
       "Production payments require COMPUTE_BUDGET_MODE=enforced",
     );
   }
+  if (
+    config.paymentsMode === "production" &&
+    config.aggregateMetricsMode !== "enabled"
+  ) {
+    throw new Error(
+      "Production payments require AGGREGATE_METRICS_MODE=enabled",
+    );
+  }
   if (config.deliveryCreditsMode === "enforced") {
     if (
       !config.deliveryCreditHmacSecret ||
@@ -408,6 +425,14 @@ export function validateConfig(config: AppConfig): void {
         "COMPUTE_BUDGET_DIEM_PER_DAY cannot exceed VENICE_DIEM_EPOCH_CAP",
       );
     }
+  }
+  if (
+    config.aggregateMetricsMode === "enabled" &&
+    (!config.upstashRedisRestUrl || !config.upstashRedisRestToken)
+  ) {
+    throw new Error(
+      "Enabled aggregate metrics require Upstash Redis REST credentials",
+    );
   }
   if (config.paymentsMode !== "off" && !config.treasuryAddress) {
     throw new Error("TREASURY_ADDRESS is required when x402 payments are enabled");

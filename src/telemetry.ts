@@ -145,7 +145,6 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): Record<string, un
   const base = {
     scope: TELEMETRY_SCOPE,
     schemaVersion: TELEMETRY_SCHEMA_VERSION,
-    timestamp: new Date().toISOString(),
     event: event.event,
   };
   switch (event.event) {
@@ -283,11 +282,13 @@ export function classifySurface(path: string): {
   if (
     path === "/" ||
     path === "/v1/catalog" ||
+    path === "/v1/stats" ||
     path === "/.well-known/agent-catalog.json" ||
     path === "/.well-known/agent-card.json" ||
     path === "/openapi.json" ||
     path === "/llms.txt" ||
-    path === "/robots.txt"
+    path === "/robots.txt" ||
+    path === "/icon.svg"
   ) {
     return { surface: "discovery" };
   }

@@ -26,7 +26,7 @@ A successfully settled and delivered job is final and non-refundable except wher
 
 ## Privacy and subprocessors
 
-Request bodies and provider response bodies are not intentionally logged or persisted. Privacy-preserving HMAC fingerprints and aggregate operational telemetry may be retained. Service providers include Venice.ai, Coinbase CDP x402 Facilitator, Vercel, and Upstash Redis.
+Request bodies and provider response bodies are not intentionally logged or persisted. Privacy-preserving HMAC fingerprints and lifetime aggregate counters may be retained. Aggregate counters exclude prompts, outputs, payer addresses, transaction hashes, IP addresses, user agents, request identifiers, and time-series activity. Vercel may retain platform and runtime-log timestamps and other infrastructure metadata under its own policies; application telemetry uses an explicit content-free field allowlist. Service providers include Venice.ai, Coinbase CDP x402 Facilitator, Vercel, and Upstash Redis.
 
 ## Availability, warranties, and liability
 

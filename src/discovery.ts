@@ -253,6 +253,7 @@ export function catalog(config: AppConfig) {
       llms: `${config.publicBaseUrl}/llms.txt`,
       agentCard: `${config.publicBaseUrl}/.well-known/agent-card.json`,
       mcp: `${config.publicBaseUrl}/mcp`,
+      stats: `${config.publicBaseUrl}/v1/stats`,
       terms: `${config.publicBaseUrl}/terms`,
     },
     payment: {
@@ -311,6 +312,14 @@ export function catalog(config: AppConfig) {
     privacy: {
       providerRoute: "private_models_only",
       retention: "request bodies and provider bodies are not intentionally logged or persisted",
+      aggregateMetrics: {
+        mode: config.aggregateMetricsMode,
+        scope: "lifetime_only",
+        timeSeries: false,
+        callerIdentifiers: false,
+        requestOrResponseContent: false,
+        endpoint: `${config.publicBaseUrl}/v1/stats`,
+      },
       webAccess: false,
     },
     treasury: {
@@ -384,6 +393,17 @@ export function openApiDocument(config: AppConfig) {
     "/v1/catalog": {
       get: { operationId: "listWorkers", summary: "List workers, prices, schemas, and constraints", responses: { "200": { description: "Worker catalog" } } },
     },
+    "/v1/stats": {
+      get: {
+        operationId: "aggregateServiceStats",
+        summary: "Read lifetime aggregate reliability and settlement counters",
+        description: "Contains no time series, caller identifiers, request content, or response content.",
+        responses: {
+          "200": { description: "Privacy-safe lifetime aggregate counters" },
+          "503": { description: "Aggregate metrics storage unavailable" },
+        },
+      },
+    },
     "/.well-known/agent-catalog.json": {
       get: { operationId: "discoverWorkers", summary: "Well-known alias for the agent worker catalog", responses: { "200": { description: "Worker catalog" } } },
     },
@@ -453,5 +473,5 @@ export function llmsText(config: AppConfig): string {
   const workers = Object.values(WORKERS)
     .map((worker) => `## ${worker.id}\n\n${worker.description}\n\n- Endpoint: POST ${config.publicBaseUrl}${worker.path}\n- Free quote: POST ${config.publicBaseUrl}/v1/quote/${worker.id}\n- Price: $${workerPrice(config, worker.id).toFixed(3)} USDC\n- Tags: ${workerContracts[worker.id].tags.join(", ")}`)
     .join("\n\n");
-  return `# DIEM Agent Workers\n\n> Bounded micro-workers for autonomous software agents, paid with USDC through x402 and powered by private Venice models.\n\n## Discovery\n\n- [Catalog](${config.publicBaseUrl}/v1/catalog)\n- [Well-known catalog](${config.publicBaseUrl}/.well-known/agent-catalog.json)\n- [OpenAPI](${config.publicBaseUrl}/openapi.json)\n- [A2A Agent Card](${config.publicBaseUrl}/.well-known/agent-card.json)\n- [MCP Streamable HTTP server](${config.publicBaseUrl}/mcp)\n- [Health](${config.publicBaseUrl}/health)\n- [Terms](${config.publicBaseUrl}/terms)\n\nAccessing, paying for, or using the service constitutes acceptance of the published terms by the caller and its operator. Every job is input-validated, provider-capacity-checked, and atomically reserved against a global compute budget before inference. When delivery protection is enforced, signed paid attempts must carry an unpredictable Idempotency-Key and interrupted deliveries receive one matching retry. Only HMAC fingerprints and aggregate state are persisted; request and provider bodies are not logged or persisted. Web search and scraping are disabled.\n\n${workers}\n\nSoftware compute cap: ${config.computeBudgetDiemPerDay.toFixed(2)} DIEM per UTC day. Provider backstop: ${config.veniceDiemEpochCap.toFixed(2)} DIEM per EPOCH, reset at 00:00 UTC. Revenue policy: settled USDC is eligible only for conversion to the official Venice DIEM token on Base; conversion and staking remain disabled unless separately authorized.\n`;
+  return `# DIEM Agent Workers\n\n> Bounded micro-workers for autonomous software agents, paid with USDC through x402 and powered by private Venice models.\n\n## Discovery\n\n- [Catalog](${config.publicBaseUrl}/v1/catalog)\n- [Well-known catalog](${config.publicBaseUrl}/.well-known/agent-catalog.json)\n- [OpenAPI](${config.publicBaseUrl}/openapi.json)\n- [A2A Agent Card](${config.publicBaseUrl}/.well-known/agent-card.json)\n- [MCP Streamable HTTP server](${config.publicBaseUrl}/mcp)\n- [Lifetime aggregate stats](${config.publicBaseUrl}/v1/stats)\n- [Health](${config.publicBaseUrl}/health)\n- [Terms](${config.publicBaseUrl}/terms)\n\nAccessing, paying for, or using the service constitutes acceptance of the published terms by the caller and its operator. Every job is input-validated, provider-capacity-checked, and atomically reserved against a global compute budget before inference. When delivery protection is enforced, signed paid attempts must carry an unpredictable Idempotency-Key and interrupted deliveries receive one matching retry. Only HMAC fingerprints and lifetime aggregate counters are persisted; prompts, outputs, payer addresses, transaction hashes, IPs, user agents, and request identifiers are excluded. Durable metrics contain no time series; platform runtime logs remain subject to Vercel's retention. Web search and scraping are disabled.\n\n${workers}\n\nSoftware compute cap: ${config.computeBudgetDiemPerDay.toFixed(2)} DIEM per UTC day. Provider backstop: ${config.veniceDiemEpochCap.toFixed(2)} DIEM per EPOCH, reset at 00:00 UTC. Revenue policy: settled USDC is eligible only for conversion to the official Venice DIEM token on Base; conversion and staking remain disabled unless separately authorized.\n`;
 }

@@ -56,7 +56,13 @@ import {
   createComputeBudgetStore,
   type ComputeBudgetStore,
 } from "./compute-budget-store.js";
+import {
+  createAggregateMetricsStore,
+  recordAggregateMetric,
+  type AggregateMetricsStore,
+} from "./aggregate-metrics-store.js";
 import { termsDocument } from "./terms.js";
+import { SERVICE_ICON_SVG } from "./service-icon.js";
 
 export type Extractor = typeof extractJsonWithVenice;
 
@@ -72,6 +78,7 @@ export interface AppDependencies {
   costEstimator?: CostEstimator;
   deliveryCreditStore?: DeliveryCreditStore;
   computeBudgetStore?: ComputeBudgetStore;
+  aggregateMetricsStore?: AggregateMetricsStore;
 }
 
 // Helmet publishes a callable ESM default, but some NodeNext build hosts
@@ -99,6 +106,8 @@ export async function buildApp(
     dependencies.deliveryCreditStore ?? createDeliveryCreditStore(config);
   const computeBudgetStore =
     dependencies.computeBudgetStore ?? createComputeBudgetStore(config);
+  const aggregateMetricsStore =
+    dependencies.aggregateMetricsStore ?? createAggregateMetricsStore(config);
   try {
     costEstimator.warm?.();
   } catch {
@@ -198,11 +207,12 @@ export async function buildApp(
         estimatedDiemCost = undefined;
       }
       const priceUsd = workerPrices.get(worker) ?? 0;
+      const durationMs = Date.now() - startedAt;
       const workerEvent: TelemetryEvent = {
         event: "worker_completed",
         worker,
         model: metrics.model,
-        durationMs: Date.now() - startedAt,
+        durationMs,
         priceUsd,
         ...(estimatedDiemCost !== undefined
           ? {
@@ -212,15 +222,37 @@ export async function buildApp(
           : {}),
       };
       res.locals.telemetryWorkerEvent = workerEvent;
+      if (aggregateMetricsStore) {
+        await recordAggregateMetric(() =>
+          aggregateMetricsStore.recordRun({
+            worker,
+            outcome: "completed",
+            durationMs,
+            ...(estimatedDiemCost !== undefined ? { estimatedDiemCost } : {}),
+          }),
+        );
+      }
       return result;
     } catch (error) {
+      const errorClass = telemetryErrorClass(error);
+      const durationMs = Date.now() - startedAt;
       const workerEvent: TelemetryEvent = {
         event: "worker_failed",
         worker,
-        durationMs: Date.now() - startedAt,
-        errorClass: telemetryErrorClass(error),
+        durationMs,
+        errorClass,
       };
       res.locals.telemetryWorkerEvent = workerEvent;
+      if (aggregateMetricsStore) {
+        await recordAggregateMetric(() =>
+          aggregateMetricsStore.recordRun({
+            worker,
+            outcome: "failed",
+            durationMs,
+            errorClass,
+          }),
+        );
+      }
       throw error;
     }
   };
@@ -385,6 +417,7 @@ export async function buildApp(
     telemetry,
     deliveryCreditStore,
     computeBudgetStore,
+    aggregateMetricsStore,
   );
 
   app.get("/", (_req, res) => {
@@ -398,6 +431,7 @@ export async function buildApp(
         llms: `${config.publicBaseUrl}/llms.txt`,
         agentCard: `${config.publicBaseUrl}/.well-known/agent-card.json`,
         mcp: `${config.publicBaseUrl}/mcp`,
+        stats: `${config.publicBaseUrl}/v1/stats`,
         terms: `${config.publicBaseUrl}/terms`,
       },
     });
@@ -410,6 +444,7 @@ export async function buildApp(
       paymentsMode: config.paymentsMode,
       deliveryCredits: config.deliveryCreditsMode,
       storefrontEnabled: config.storefrontEnabled,
+      aggregateMetrics: config.aggregateMetricsMode,
       computeBudget: {
         provider: {
           currency: "DIEM",
@@ -428,6 +463,28 @@ export async function buildApp(
     });
   });
   app.get("/v1/catalog", (_req, res) => res.json(catalog(config)));
+  app.get("/v1/stats", async (_req, res) => {
+    if (!aggregateMetricsStore) {
+      res.json({
+        available: false,
+        mode: "off",
+        privacy: {
+          timeSeries: false,
+          callerIdentifiers: false,
+          requestOrResponseContent: false,
+        },
+      });
+      return;
+    }
+    try {
+      const snapshot = await aggregateMetricsStore.snapshot();
+      res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+      res.json(snapshot);
+    } catch {
+      res.setHeader("Cache-Control", "private, no-store");
+      res.status(503).json({ error: "aggregate_metrics_unavailable" });
+    }
+  });
   app.get("/.well-known/agent-catalog.json", (_req, res) => res.json(catalog(config)));
   app.get("/openapi.json", (_req, res) => res.json(openApiDocument(config)));
   app.get("/.well-known/agent-card.json", (_req, res) => res.json(agentCard(config)));
@@ -436,6 +493,10 @@ export async function buildApp(
   app.get("/robots.txt", (_req, res) =>
     res.type("text/plain").send("User-agent: *\nAllow: /\n"),
   );
+  app.get("/icon.svg", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.type("image/svg+xml").send(SERVICE_ICON_SVG);
+  });
   app.all("/mcp", (req, res) => {
     void handleMcpRequest(config, req, res);
   });

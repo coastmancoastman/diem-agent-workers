@@ -5,6 +5,7 @@ import { SERVICE_VERSION, WORKERS, WORKER_ID } from "../src/constants.js";
 import { parseTranscribeAudioInput } from "../src/schema.js";
 import type { ExtractJsonResult, JsonWorkerResult } from "../src/venice.js";
 import type { TelemetryEvent } from "../src/telemetry.js";
+import { MemoryAggregateMetricsStore } from "../src/aggregate-metrics-store.js";
 import { testConfig, validSchema } from "./helpers.js";
 
 describe("machine-first HTTP API", () => {
@@ -17,6 +18,7 @@ describe("machine-first HTTP API", () => {
     expect(response.body.discovery.agentCard).toBe(
       "http://test.local/.well-known/agent-card.json",
     );
+    expect(response.body.discovery.stats).toBe("http://test.local/v1/stats");
   });
 
   it("publishes health, catalog, OpenAPI, and llms discovery", async () => {
@@ -82,6 +84,21 @@ describe("machine-first HTTP API", () => {
       protocolBinding: "JSONRPC",
       protocolVersion: "1.0",
     });
+    const stats = await request(app).get("/v1/stats").expect(200);
+    expect(stats.body).toMatchObject({
+      available: false,
+      mode: "off",
+      privacy: {
+        timeSeries: false,
+        callerIdentifiers: false,
+        requestOrResponseContent: false,
+      },
+    });
+    const icon = await request(app).get("/icon.svg").expect(200);
+    expect(icon.headers["content-type"]).toContain("image/svg+xml");
+    expect(Buffer.from(icon.body).toString("utf8")).toContain(
+      "DIEM Agent Workers",
+    );
     await request(app).post("/v1/quote/not-a-worker").expect(404, {
       error: "worker_not_found",
     });
@@ -153,6 +170,41 @@ describe("machine-first HTTP API", () => {
     expect(serialized).not.toContain("inputTokens");
   });
 
+  it("publishes only lifetime aggregate worker metrics", async () => {
+    const privateSource = "private-source-never-stored";
+    const metrics = new MemoryAggregateMetricsStore();
+    const extractor = vi.fn(async (): Promise<ExtractJsonResult> => ({
+      worker: WORKER_ID,
+      result: { name: "private-output-never-stored", count: 3 },
+      validation: { valid: true },
+      provider: { name: "venice", model: "test-model" },
+      usage: {},
+    }));
+    const app = await buildApp(testConfig(), {
+      extractor,
+      aggregateMetricsStore: metrics,
+      costEstimator: { estimate: () => 0.001 },
+    });
+
+    await request(app)
+      .post(WORKERS.extractJson.path)
+      .set("x-request-id", "private-request-id-never-stored")
+      .send({ source: privateSource, schema: validSchema })
+      .expect(200);
+    const stats = await request(app).get("/v1/stats").expect(200);
+
+    expect(stats.body.totals).toMatchObject({
+      runs: 1,
+      completedRuns: 1,
+      failedRuns: 0,
+      estimatedDiemCost: "0.001000000",
+    });
+    const serialized = JSON.stringify(stats.body);
+    expect(serialized).not.toContain(privateSource);
+    expect(serialized).not.toContain("private-output-never-stored");
+    expect(serialized).not.toContain("private-request-id-never-stored");
+  });
+
   it("never lets telemetry or pricing failures change a worker response", async () => {
     const extractor = vi.fn(async (): Promise<ExtractJsonResult> => ({
       worker: WORKER_ID,
@@ -161,8 +213,13 @@ describe("machine-first HTTP API", () => {
       provider: { name: "venice", model: "test-model" },
       usage: {},
     }));
+    const metrics = new MemoryAggregateMetricsStore();
+    vi.spyOn(metrics, "recordRun").mockRejectedValue(
+      new Error("aggregate metrics unavailable"),
+    );
     const app = await buildApp(testConfig(), {
       extractor,
+      aggregateMetricsStore: metrics,
       telemetry: {
         emit: () => {
           throw new Error("telemetry unavailable");

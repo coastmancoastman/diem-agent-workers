@@ -4,6 +4,7 @@ import {
   paymentMiddlewareFromHTTPServer,
   type x402HTTPResourceServer,
 } from "@x402/express";
+import type { RouteConfig } from "@x402/core/server";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import {
   BASE_CAIP2,
@@ -25,6 +26,70 @@ import {
 } from "./delivery-credits.js";
 import type { DeliveryCreditStore } from "./delivery-credit-store.js";
 import type { ComputeBudgetStore } from "./compute-budget-store.js";
+import {
+  recordAggregateMetric,
+  type AggregateMetricsStore,
+} from "./aggregate-metrics-store.js";
+
+export function paymentRoutes(
+  config: AppConfig,
+  network: `${string}:${string}` = config.paymentsMode === "development"
+    ? BASE_SEPOLIA_CAIP2
+    : BASE_CAIP2,
+): Record<string, RouteConfig> {
+  const workerRoutes = Object.values(WORKERS).map((worker) => {
+    const contract = workerContracts[worker.id];
+    const extensions = config.publicBaseUrl.startsWith("https://")
+      ? declareDiscoveryExtension({
+          bodyType: "json",
+          input: contract.input,
+          inputSchema: contract.inputSchema,
+          output: { example: contract.output },
+        })
+      : {};
+    return [
+      `POST ${worker.path}`,
+      {
+        accepts: {
+          scheme: "exact",
+          payTo: "",
+          price: `$${workerPrice(config, worker.id).toFixed(3)}`,
+          network,
+          maxTimeoutSeconds: 300,
+        },
+        resource: `${config.publicBaseUrl}${worker.path}`,
+        description: `${worker.description} Use constitutes acceptance of ${config.publicBaseUrl}/terms.`,
+        mimeType: "application/json",
+        serviceName: "DIEM Agent Workers",
+        tags: [...contract.tags.slice(0, 3), "private-ai", "x402"],
+        iconUrl: `${config.publicBaseUrl}/icon.svg`,
+        extensions,
+      } satisfies RouteConfig,
+    ] as const;
+  });
+  return Object.fromEntries([
+    ...workerRoutes,
+    [
+      "POST /a2a",
+      {
+        accepts: {
+          scheme: "exact",
+          payTo: "",
+          price: `$${config.x402PriceUsd.toFixed(3)}`,
+          network,
+          maxTimeoutSeconds: 300,
+        },
+        resource: `${config.publicBaseUrl}/a2a`,
+        description:
+          `A2A 1.0 JSON-RPC adapter for synchronous DIEM Agent Workers. SendMessage accepts one JSON data part containing worker and input. Use constitutes acceptance of ${config.publicBaseUrl}/terms.`,
+        mimeType: "application/json",
+        serviceName: "DIEM Agent Workers",
+        tags: ["a2a", "json-rpc", "multi-worker", "private-ai", "x402"],
+        iconUrl: `${config.publicBaseUrl}/icon.svg`,
+      } satisfies RouteConfig,
+    ],
+  ]);
+}
 
 export async function attachPaymentMiddleware(
   app: Express,
@@ -32,6 +97,7 @@ export async function attachPaymentMiddleware(
   telemetry: TelemetrySink,
   deliveryCreditStore?: DeliveryCreditStore,
   computeBudgetStore?: ComputeBudgetStore,
+  aggregateMetricsStore?: AggregateMetricsStore,
 ): Promise<void> {
   if (config.paymentsMode === "off") return;
   if (!config.treasuryAddress) {
@@ -47,38 +113,7 @@ export async function attachPaymentMiddleware(
   // CDP injects minimal Bazaar metadata on every route. Add our richer schema
   // metadata only for public HTTPS deployments; CDP rejects local HTTP URLs
   // during discovery validation, so local settlements cannot be indexed.
-  const workerRoutes = Object.values(WORKERS).map((worker) => {
-      const contract = workerContracts[worker.id];
-      const extensions = config.publicBaseUrl.startsWith("https://")
-        ? declareDiscoveryExtension({
-            bodyType: "json",
-            input: contract.input,
-            inputSchema: contract.inputSchema,
-            output: { example: contract.output },
-          })
-        : {};
-      return [
-        `POST ${worker.path}`,
-        {
-          price: `$${workerPrice(config, worker.id).toFixed(3)}`,
-          description: `${worker.description} Use constitutes acceptance of ${config.publicBaseUrl}/terms.`,
-          networks: [network],
-          extensions,
-        },
-      ] as const;
-    });
-  const routes = Object.fromEntries([
-    ...workerRoutes,
-    [
-      "POST /a2a",
-      {
-        price: `$${config.x402PriceUsd.toFixed(3)}`,
-        description:
-          `A2A 1.0 JSON-RPC adapter for synchronous DIEM Agent Workers. SendMessage accepts one JSON data part containing worker and input. Use constitutes acceptance of ${config.publicBaseUrl}/terms.`,
-        networks: [network],
-      },
-    ],
-  ]);
+  const routes = paymentRoutes(config, network);
   const server = await createX402Server({
     apiKeyId: config.cdpApiKeyId,
     apiKeySecret: config.cdpApiKeySecret,
@@ -115,6 +150,14 @@ export async function attachPaymentMiddleware(
             Date.now(),
           );
           if (reservation.status === "reserved") {
+            if (aggregateMetricsStore) {
+              await recordAggregateMetric(() =>
+                aggregateMetricsStore.recordReservation({
+                  worker: context.worker,
+                  reservedDiem: reservation.reservedDiem,
+                }),
+              );
+            }
             emitTelemetry(telemetry, {
               event: "compute_budget_reserved",
               worker: context.worker,
@@ -199,6 +242,32 @@ export async function attachPaymentMiddleware(
     );
   }
 
+  if (aggregateMetricsStore) {
+    server.resourceServer.onAfterSettle(async ({ transportContext }) => {
+      let deliveryContext: ReturnType<typeof deliveryCreditContextFromTransport>;
+      let paymentContext: ReturnType<typeof paymentTelemetryContextFromTransport>;
+      try {
+        deliveryContext = deliveryCreditContextFromTransport(
+          config,
+          transportContext,
+        );
+        paymentContext = paymentTelemetryContextFromTransport(
+          config,
+          transportContext,
+        );
+      } catch {
+        return;
+      }
+      if (!deliveryContext || !paymentContext) return;
+      await recordAggregateMetric(() =>
+        aggregateMetricsStore.recordSettlement({
+          worker: deliveryContext.worker,
+          priceUsd: paymentContext.priceUsd,
+        }),
+      );
+    });
+  }
+
   server.resourceServer.onSettleFailure(async ({ phase, transportContext }) => {
     if (deliveryCreditStore) {
       const creditContext = deliveryCreditContextFromTransport(
@@ -239,6 +308,7 @@ export async function attachPaymentMiddleware(
         deliveryCreditStore,
         telemetry,
         computeBudgetStore,
+        aggregateMetricsStore,
       ),
     );
   }

@@ -1,6 +1,6 @@
 # DIEM Agent Workers
 
-Machine-discoverable micro-work powered by Venice inference, paid in USDC through x402, with a treasury that can only reinvest USDC into Venice DIEM on Base.
+Privacy-first, machine-discoverable micro-work powered by private Venice inference and paid in USDC through x402.
 
 This repository is a fail-closed, agent-first Base mainnet storefront. It exposes six bounded workers over plain HTTP + x402, publishes them to the CDP Bazaar, and adds A2A 1.0, MCP, OpenAPI, `llms.txt`, and portable-skill discovery surfaces.
 
@@ -17,14 +17,15 @@ Public beta: [diem-agent-workers.vercel.app](https://diem-agent-workers.vercel.a
 
 These are fixed prices per successful authorization attempt, not estimates. The public deployment is a low-cap Base mainnet beta: an atomic 0.25 DIEM software budget limits daily inference starts, while the Venice API key retains a separate 1.69 DIEM provider backstop.
 
-## The flywheel
+## Privacy by design
 
-```text
-staked DIEM -> renewing Venice API capacity -> paid agent work
-            -> USDC revenue -> USDC-to-DIEM purchase -> manual staking
-```
+- Prompts, outputs, payer addresses, transaction hashes, IP addresses, user agents, and request identifiers are excluded from durable metrics.
+- Request and provider bodies are not intentionally logged or persisted.
+- Public reliability statistics are lifetime aggregates only; there are no timestamps or time buckets that could reveal activity patterns.
+- Workers use private Venice models, with web search, scraping, and model tool use disabled.
+- Delivery protection stores only HMAC fingerprints and bounded state needed to redeem an interrupted delivery.
 
-Purchased DIEM is not automatically staked in this release. Venice currently directs DIEM staking through its token dashboard and warns users not to send tokens directly to a contract address. Until a documented programmatic DIEM-staking transaction is verified, that final action stays manual.
+The optional USDC-to-DIEM treasury remains disabled in production and is not part of the storefront runtime. No wallet signer or private key is deployed to Vercel.
 
 ## What is implemented
 
@@ -38,9 +39,9 @@ Purchased DIEM is not automatically staked in this release. Venice currently dir
 - Free machine-readable catalog and per-worker fixed-price quotes
 - OpenAPI 3.1, `llms.txt`, A2A 1.0 Agent Card, JSON-RPC `SendMessage`, and Streamable HTTP MCP discovery
 - x402 exact-price USDC payment gating through the CDP Facilitator
-- Rich per-worker x402 Bazaar input/output metadata
+- Rich per-worker x402 Bazaar schemas, service name, topical tags, and service icon
 - Official MCP Registry metadata for the public Streamable HTTP server
-- Privacy-preserving operational telemetry and an aggregate margin report
+- Privacy-preserving runtime telemetry plus durable lifetime aggregate reliability, settlement, revenue, latency-bucket, and DIEM counters
 - Durable, idempotent paid-delivery credits backed by atomic Upstash Redis state
 - Published machine-readable terms linked from every response and discovery surface
 - Payments sent directly to a dedicated treasury address
@@ -103,7 +104,7 @@ curl -X POST http://127.0.0.1:8402/v1/jobs/extract-json \
   }'
 ```
 
-Production refuses to start unless `PAYMENTS_MODE=production`, durable delivery credits are enforced, and the global compute budget is enforced. The checked-in and local defaults remain `PAYMENTS_MODE=off`, `STOREFRONT_ENABLED=false`, and `TREASURY_MODE=disabled`.
+Production refuses to start unless `PAYMENTS_MODE=production`, durable delivery credits are enforced, the global compute budget is enforced, and aggregate-only metrics are enabled. The checked-in and local defaults remain `PAYMENTS_MODE=off`, `STOREFRONT_ENABLED=false`, `AGGREGATE_METRICS_MODE=off`, and `TREASURY_MODE=disabled`.
 
 ## Add x402 payments
 
@@ -158,6 +159,7 @@ Production also requires an atomic global compute budget:
 ```dotenv
 COMPUTE_BUDGET_MODE=enforced
 COMPUTE_BUDGET_DIEM_PER_DAY=0.25
+AGGREGATE_METRICS_MODE=enabled
 STOREFRONT_ENABLED=true
 ```
 
@@ -185,6 +187,8 @@ Mainnet launch checklist:
 6. Enable durable delivery credits and the 0.25 DIEM atomic software budget.
 7. Set `PAYMENTS_MODE=production`, keep `TREASURY_MODE=disabled`, and deploy.
 8. Complete one real low-value payment so Bazaar can index the Base mainnet resource.
+
+The mainnet acceptance harness uses a distinct cents-only buyer kept in macOS Keychain, verifies every payment requirement before signing, and refuses a combined storefront authorization above $0.095 USDC. Select individual workers with `MAINNET_X402_TEST_WORKERS` or use `pnpm test:mainnet:all`; multi-worker runs require the exact acknowledgement `PAY_UP_TO_0_095_USDC_WITH_DISTINCT_BUYER_ON_BASE`. Its output deliberately omits wallet addresses, transaction hashes, request bodies, and provider responses.
 
 ## Reinvest USDC into DIEM
 
@@ -254,6 +258,7 @@ The runner does not sell DIEM, withdraw USDC, bridge assets, select arbitrary to
 ## Machine discovery
 
 - `GET /v1/catalog` — capabilities, schemas, constraints, price
+- `GET /v1/stats` — lifetime aggregate reliability and settlement counters with no caller identities or time series
 - `GET /.well-known/agent-catalog.json` — crawler-friendly catalog alias
 - `GET /openapi.json` — OpenAPI 3.1 contract
 - `GET /llms.txt` — concise agent-readable index
@@ -261,7 +266,8 @@ The runner does not sell DIEM, withdraw USDC, bridge assets, select arbitrary to
 - `POST /a2a` — A2A 1.0 JSON-RPC `SendMessage` adapter at a fixed $0.020 USDC price
 - `POST /mcp` — stateless Streamable HTTP MCP server with free catalog, quote, and call-preparation tools
 - `skills/extract-text-to-json/` — portable agent skill
-- x402 Bazaar metadata — automatically attached when payments are enabled
+- `GET /icon.svg` — stable service icon used by x402 Bazaar metadata
+- x402 Bazaar metadata — schemas, service name, five topical tags, and icon automatically attached when payments are enabled
 
 The MCP adapter intentionally does not accept wallet keys. Agents execute prepared calls with their own x402-capable client or use Coinbase's Bazaar MCP server, which can discover indexed x402 resources.
 
@@ -287,6 +293,8 @@ vercel logs --environment production --since 24h --no-branch --json --limit 1000
 ```
 
 The report contains request and payment counts, settled USDC revenue, estimated DIEM cost and gross margin, latency percentiles, and coarse failure counts. It cannot reconstruct individual customer content or identity.
+
+Because serverless runtime logs are not a durable business ledger, production also writes atomic lifetime aggregate counters to the same Upstash database used for safety state. `GET /v1/stats` publishes completed/failed runs, coarse failure classes, fixed latency buckets, settlements, revenue, and DIEM estimates by worker. The counter key contains no dates or timestamps, and the write API accepts no free-form customer or request fields.
 
 ## Security and legal notes
 
