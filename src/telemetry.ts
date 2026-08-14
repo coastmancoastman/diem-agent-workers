@@ -168,7 +168,7 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): Record<string, un
 
 export class JsonConsoleTelemetry implements TelemetrySink {
   emit(event: TelemetryEvent): void {
-    console.info(JSON.stringify(sanitizeTelemetryEvent(event)));
+    console.log(JSON.stringify(sanitizeTelemetryEvent(event)));
   }
 }
 

@@ -25,6 +25,7 @@ describe("x402 payment response telemetry", () => {
     app.post(WORKERS.extractJson.path, (_req, res) => {
       res.setHeader("PAYMENT-RESPONSE", encoded);
       res.setHeader("payment-response", encoded);
+      expect(events).toEqual([]);
       res.json({ ok: true });
     });
 

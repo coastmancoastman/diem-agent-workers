@@ -6,6 +6,7 @@ import { workerPrice } from "./discovery.js";
 import {
   emitTelemetry,
   workerForPath,
+  type TelemetryEvent,
   type TelemetrySink,
 } from "./telemetry.js";
 
@@ -75,6 +76,18 @@ export function paymentResponseTelemetryMiddleware(
 
     const originalSetHeader = res.setHeader;
     let settlementRecorded = false;
+    let settlementEvent:
+      | Extract<
+          TelemetryEvent,
+          { event: "x402_payment_settled" | "x402_payment_failed" }
+        >
+      | undefined;
+    // The storefront's request_completed listener was registered earlier, so
+    // this listener runs afterward and leaves the payment result as the final
+    // structured line for hosts that retain one log message per invocation.
+    res.once("finish", () => {
+      if (settlementEvent) emitTelemetry(telemetry, settlementEvent);
+    });
     res.setHeader = function setHeaderWithSettlementTelemetry(name, value) {
       if (!settlementRecorded && name.toLowerCase() === "payment-response") {
         const encoded = typeof value === "string"
@@ -87,7 +100,7 @@ export function paymentResponseTelemetryMiddleware(
             const result = decodePaymentResponseHeader(encoded);
             settlementRecorded = true;
             if (result.success) {
-              emitTelemetry(telemetry, {
+              settlementEvent = {
                 event: "x402_payment_settled",
                 surface: context.surface,
                 network: result.network,
@@ -96,16 +109,16 @@ export function paymentResponseTelemetryMiddleware(
                 ...(context.surface === "worker"
                   ? { worker: context.worker }
                   : {}),
-              });
+              };
             } else {
-              emitTelemetry(telemetry, {
+              settlementEvent = {
                 event: "x402_payment_failed",
                 surface: context.surface,
                 phase: "after-handler",
                 ...(context.surface === "worker"
                   ? { worker: context.worker }
                   : {}),
-              });
+              };
             }
           } catch {
             // The protocol middleware owns header validation. Telemetry must

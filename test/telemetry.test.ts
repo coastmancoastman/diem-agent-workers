@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { VeniceCatalogCostEstimator } from "../src/costs.js";
 import { WORKERS } from "../src/constants.js";
 import {
+  JsonConsoleTelemetry,
   TELEMETRY_SCOPE,
   classifySurface,
   sanitizeTelemetryEvent,
@@ -13,6 +14,30 @@ import {
 import { testConfig } from "./helpers.js";
 
 describe("privacy-preserving telemetry", () => {
+  it("writes structured events at the Vercel-compatible stdout level", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    new JsonConsoleTelemetry().emit({
+      event: "x402_payment_settled",
+      surface: "worker",
+      network: "eip155:84532",
+      phase: "after-handler",
+      priceUsd: 0.02,
+      worker: WORKERS.extractJson.id,
+    });
+
+    expect(log).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      scope: TELEMETRY_SCOPE,
+      event: "x402_payment_settled",
+      worker: WORKERS.extractJson.id,
+    });
+    expect(info).not.toHaveBeenCalled();
+    log.mockRestore();
+    info.mockRestore();
+  });
+
   it("rebuilds events from an allowlist and drops identifying or content fields", () => {
     const event = {
       event: "worker_completed",
