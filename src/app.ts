@@ -228,8 +228,9 @@ export async function buildApp(
         | TelemetryEvent
         | undefined;
       if (
-        workerEvent?.event === "worker_completed" ||
-        workerEvent?.event === "worker_failed"
+        res.locals.telemetryWorkerBundled !== true &&
+        (workerEvent?.event === "worker_completed" ||
+          workerEvent?.event === "worker_failed")
       ) {
         emitTelemetry(telemetry, workerEvent);
       }

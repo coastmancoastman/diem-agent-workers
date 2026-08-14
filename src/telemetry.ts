@@ -57,12 +57,20 @@ export type TelemetryEvent =
       phase: "before-handler" | "after-handler";
       priceUsd: number;
       worker?: WorkerId;
+      model?: string;
+      workerDurationMs?: number;
+      estimatedDiemCost?: number;
+      estimatedGrossMarginUsd?: number;
     }
   | {
       event: "x402_payment_failed";
       surface: "worker" | "a2a";
       phase: "before-handler" | "after-handler";
       worker?: WorkerId;
+      model?: string;
+      workerDurationMs?: number;
+      estimatedDiemCost?: number;
+      estimatedGrossMarginUsd?: number;
     };
 
 export interface TelemetrySink {
@@ -155,6 +163,16 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): Record<string, un
         phase: event.phase,
         priceUsd: money(event.priceUsd),
         ...(event.worker ? { worker: event.worker } : {}),
+        ...(event.model ? { model: safeModel(event.model) } : {}),
+        ...(event.workerDurationMs !== undefined
+          ? { workerDurationMs: duration(event.workerDurationMs) }
+          : {}),
+        ...(event.estimatedDiemCost !== undefined
+          ? { estimatedDiemCost: money(event.estimatedDiemCost) }
+          : {}),
+        ...(event.estimatedGrossMarginUsd !== undefined
+          ? { estimatedGrossMarginUsd: signedMoney(event.estimatedGrossMarginUsd) }
+          : {}),
       };
     case "x402_payment_failed":
       return {
@@ -162,6 +180,16 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): Record<string, un
         surface: event.surface,
         phase: event.phase,
         ...(event.worker ? { worker: event.worker } : {}),
+        ...(event.model ? { model: safeModel(event.model) } : {}),
+        ...(event.workerDurationMs !== undefined
+          ? { workerDurationMs: duration(event.workerDurationMs) }
+          : {}),
+        ...(event.estimatedDiemCost !== undefined
+          ? { estimatedDiemCost: money(event.estimatedDiemCost) }
+          : {}),
+        ...(event.estimatedGrossMarginUsd !== undefined
+          ? { estimatedGrossMarginUsd: signedMoney(event.estimatedGrossMarginUsd) }
+          : {}),
       };
   }
 }
