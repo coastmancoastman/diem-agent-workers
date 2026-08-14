@@ -117,6 +117,10 @@ describe("machine-first HTTP API", () => {
         }),
       ]),
     );
+    expect(events.map((event) => event.event)).toEqual([
+      "worker_completed",
+      "request_completed",
+    ]);
     const serialized = JSON.stringify(events);
     expect(serialized).not.toContain(privateSource);
     expect(serialized).not.toContain("private-output-should-never-appear");

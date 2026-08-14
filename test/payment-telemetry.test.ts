@@ -64,6 +64,46 @@ describe("x402 payment response telemetry", () => {
     expect(events[0]).not.toHaveProperty("transaction");
   });
 
+  it("emits settlement before finish listeners registered earlier in the stack", async () => {
+    const config = testConfig();
+    const events: TelemetryEvent[] = [];
+    const encoded = encodePaymentResponseHeader({
+      success: true,
+      network: BASE_SEPOLIA_CAIP2,
+      transaction: "0xprivate-transaction-hash",
+    });
+    const app = express();
+    app.use((_req, res, next) => {
+      res.once("finish", () => {
+        events.push({
+          event: "request_completed",
+          surface: "worker",
+          method: "POST",
+          statusCode: 200,
+          durationMs: 1,
+          paymentsMode: "development",
+          worker: WORKERS.extractJson.id,
+        });
+      });
+      next();
+    });
+    app.use(
+      paymentResponseTelemetryMiddleware(config, {
+        emit: (event) => events.push(event),
+      }),
+    );
+    app.post(WORKERS.extractJson.path, (_req, res) => {
+      res.setHeader("PAYMENT-RESPONSE", encoded);
+      res.json({ ok: true });
+    });
+
+    await request(app).post(WORKERS.extractJson.path).expect(200, { ok: true });
+    expect(events.map((event) => event.event)).toEqual([
+      "x402_payment_settled",
+      "request_completed",
+    ]);
+  });
+
   it("does not let malformed settlement metadata change the response", async () => {
     const config = testConfig();
     const events: TelemetryEvent[] = [];
