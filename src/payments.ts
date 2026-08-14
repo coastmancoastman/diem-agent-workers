@@ -17,6 +17,7 @@ import { emitTelemetry, type TelemetrySink } from "./telemetry.js";
 import {
   paymentResponseTelemetryMiddleware,
   paymentTelemetryContextFromTransport,
+  suppressX402ExtensionResponseDiagnostics,
 } from "./payment-telemetry.js";
 
 export async function attachPaymentMiddleware(
@@ -31,6 +32,7 @@ export async function attachPaymentMiddleware(
   if (!config.cdpApiKeyId || !config.cdpApiKeySecret) {
     throw new Error("Payment middleware requires CDP facilitator credentials");
   }
+  suppressX402ExtensionResponseDiagnostics();
 
   const network =
     config.paymentsMode === "development" ? BASE_SEPOLIA_CAIP2 : BASE_CAIP2;

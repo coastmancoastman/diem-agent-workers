@@ -14,7 +14,7 @@ import {
 import { testConfig } from "./helpers.js";
 
 describe("privacy-preserving telemetry", () => {
-  it("writes structured events at the Vercel-compatible stdout level", () => {
+  it("reserves the retained stdout level for payment results", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
@@ -34,6 +34,21 @@ describe("privacy-preserving telemetry", () => {
       worker: WORKERS.extractJson.id,
     });
     expect(info).not.toHaveBeenCalled();
+
+    new JsonConsoleTelemetry().emit({
+      event: "request_completed",
+      surface: "health",
+      method: "GET",
+      statusCode: 200,
+      durationMs: 4,
+      paymentsMode: "development",
+    });
+    expect(info).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(info.mock.calls[0]?.[0]))).toMatchObject({
+      scope: TELEMETRY_SCOPE,
+      event: "request_completed",
+      surface: "health",
+    });
     log.mockRestore();
     info.mockRestore();
   });

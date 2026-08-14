@@ -168,7 +168,15 @@ export function sanitizeTelemetryEvent(event: TelemetryEvent): Record<string, un
 
 export class JsonConsoleTelemetry implements TelemetrySink {
   emit(event: TelemetryEvent): void {
-    console.log(JSON.stringify(sanitizeTelemetryEvent(event)));
+    const line = JSON.stringify(sanitizeTelemetryEvent(event));
+    if (
+      event.event === "x402_payment_settled" ||
+      event.event === "x402_payment_failed"
+    ) {
+      console.log(line);
+      return;
+    }
+    console.info(line);
   }
 }
 

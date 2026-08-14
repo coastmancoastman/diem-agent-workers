@@ -1,13 +1,32 @@
 import { encodePaymentResponseHeader } from "@x402/core/http";
 import express from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BASE_SEPOLIA_CAIP2, WORKERS } from "../src/constants.js";
-import { paymentResponseTelemetryMiddleware } from "../src/payment-telemetry.js";
+import {
+  paymentResponseTelemetryMiddleware,
+  suppressX402ExtensionResponseDiagnostics,
+} from "../src/payment-telemetry.js";
 import type { TelemetryEvent, TelemetrySink } from "../src/telemetry.js";
 import { testConfig } from "./helpers.js";
 
 describe("x402 payment response telemetry", () => {
+  it("suppresses only the redundant pre-settlement x402 diagnostic", () => {
+    const originalLog = vi.fn();
+    const target = { log: originalLog };
+    suppressX402ExtensionResponseDiagnostics(target);
+    suppressX402ExtensionResponseDiagnostics(target);
+
+    target.log('[x402] extension responses: {"bazaar":{"status":"processing"}}');
+    target.log("keep this structured or application log", { ok: true });
+
+    expect(originalLog).toHaveBeenCalledOnce();
+    expect(originalLog).toHaveBeenCalledWith(
+      "keep this structured or application log",
+      { ok: true },
+    );
+  });
+
   it("records one sanitized settlement event from the authoritative response header", async () => {
     const config = testConfig({ X402_PRICE_USD: "0.020" });
     const events: TelemetryEvent[] = [];
