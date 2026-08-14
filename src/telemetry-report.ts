@@ -41,6 +41,12 @@ export interface TelemetrySummary {
     rejected: number;
     byReason: Record<string, number>;
   };
+  computeBudget: {
+    reservations: number;
+    reservedDiem: number;
+    blocked: number;
+    byReason: Record<string, number>;
+  };
   workers: Record<string, WorkerTelemetrySummary>;
 }
 
@@ -136,6 +142,12 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
     rejected: 0,
     byReason: {} as Record<string, number>,
   };
+  const computeBudget = {
+    reservations: 0,
+    reservedDiem: 0,
+    blocked: 0,
+    byReason: {} as Record<string, number>,
+  };
   const recordBundledWorkerOutcome = (event: StoredEvent) => {
     if (typeof event.worker !== "string" || typeof event.model !== "string") {
       return;
@@ -156,7 +168,8 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
   for (const event of events) {
     if (
       event.scope !== TELEMETRY_SCOPE ||
-      event.schemaVersion !== TELEMETRY_SCHEMA_VERSION
+      (event.schemaVersion !== 1 &&
+        event.schemaVersion !== TELEMETRY_SCHEMA_VERSION)
     ) {
       continue;
     }
@@ -222,6 +235,18 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
       const reason = typeof event.reason === "string" ? event.reason : "unknown";
       deliveryCredits.byReason[reason] =
         (deliveryCredits.byReason[reason] ?? 0) + 1;
+      continue;
+    }
+    if (event.event === "compute_budget_reserved") {
+      computeBudget.reservations += 1;
+      computeBudget.reservedDiem += finiteNumber(event.reservedDiem) ?? 0;
+      continue;
+    }
+    if (event.event === "compute_budget_blocked") {
+      computeBudget.blocked += 1;
+      const reason = typeof event.reason === "string" ? event.reason : "unknown";
+      computeBudget.byReason[reason] =
+        (computeBudget.byReason[reason] ?? 0) + 1;
     }
   }
 
@@ -251,6 +276,10 @@ export function summarizeTelemetry(events: StoredEvent[]): TelemetrySummary {
       settledRevenueUsd: roundMoney(payments.settledRevenueUsd),
     },
     deliveryCredits,
+    computeBudget: {
+      ...computeBudget,
+      reservedDiem: roundMoney(computeBudget.reservedDiem),
+    },
     workers: publicWorkers,
   };
 }

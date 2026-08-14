@@ -28,6 +28,7 @@ import {
   WORKERS,
   WORKER_ID,
   WORKER_PATH,
+  PAID_WORKER_PATHS,
   type WorkerId,
 } from "./constants.js";
 import { capacityMiddleware, VeniceReadiness } from "./readiness.js";
@@ -51,6 +52,11 @@ import {
   createDeliveryCreditStore,
   type DeliveryCreditStore,
 } from "./delivery-credit-store.js";
+import {
+  createComputeBudgetStore,
+  type ComputeBudgetStore,
+} from "./compute-budget-store.js";
+import { termsDocument } from "./terms.js";
 
 export type Extractor = typeof extractJsonWithVenice;
 
@@ -65,6 +71,7 @@ export interface AppDependencies {
   telemetry?: TelemetrySink;
   costEstimator?: CostEstimator;
   deliveryCreditStore?: DeliveryCreditStore;
+  computeBudgetStore?: ComputeBudgetStore;
 }
 
 // Helmet publishes a callable ESM default, but some NodeNext build hosts
@@ -90,6 +97,8 @@ export async function buildApp(
     dependencies.costEstimator ?? new VeniceCatalogCostEstimator(config);
   const deliveryCreditStore =
     dependencies.deliveryCreditStore ?? createDeliveryCreditStore(config);
+  const computeBudgetStore =
+    dependencies.computeBudgetStore ?? createComputeBudgetStore(config);
   try {
     costEstimator.warm?.();
   } catch {
@@ -286,6 +295,10 @@ export async function buildApp(
       : crypto.randomUUID();
     res.setHeader("x-request-id", requestId);
     res.setHeader("x-payments-mode", config.paymentsMode);
+    res.setHeader(
+      "Link",
+      `<${config.publicBaseUrl}/terms>; rel="terms-of-service"`,
+    );
     next();
   });
 
@@ -348,9 +361,31 @@ export async function buildApp(
   });
 
   if (config.paymentsMode !== "off") {
+    app.use((req, res, next) => {
+      const paidPath =
+        req.path === "/a2a" ||
+        PAID_WORKER_PATHS.includes(
+          req.path as (typeof PAID_WORKER_PATHS)[number],
+        );
+      if (req.method === "POST" && paidPath && !config.storefrontEnabled) {
+        res.setHeader("Retry-After", "300");
+        res.status(503).json({
+          error: "storefront_disabled",
+          message: "Paid work is temporarily disabled; no payment was requested.",
+        });
+        return;
+      }
+      next();
+    });
     app.use(capacityMiddleware(dependencies.readiness ?? new VeniceReadiness(config)));
   }
-  await attachPaymentMiddleware(app, config, telemetry, deliveryCreditStore);
+  await attachPaymentMiddleware(
+    app,
+    config,
+    telemetry,
+    deliveryCreditStore,
+    computeBudgetStore,
+  );
 
   app.get("/", (_req, res) => {
     res.json({
@@ -363,6 +398,7 @@ export async function buildApp(
         llms: `${config.publicBaseUrl}/llms.txt`,
         agentCard: `${config.publicBaseUrl}/.well-known/agent-card.json`,
         mcp: `${config.publicBaseUrl}/mcp`,
+        terms: `${config.publicBaseUrl}/terms`,
       },
     });
   });
@@ -373,11 +409,21 @@ export async function buildApp(
       workerReady: Boolean(config.veniceApiKey),
       paymentsMode: config.paymentsMode,
       deliveryCredits: config.deliveryCreditsMode,
+      storefrontEnabled: config.storefrontEnabled,
       computeBudget: {
-        currency: "DIEM",
-        cap: config.veniceDiemEpochCap,
-        period: "EPOCH",
-        resetsAt: "00:00 UTC",
+        provider: {
+          currency: "DIEM",
+          cap: config.veniceDiemEpochCap,
+          period: "EPOCH",
+          resetsAt: "00:00 UTC",
+        },
+        software: {
+          mode: config.computeBudgetMode,
+          currency: "DIEM",
+          cap: config.computeBudgetDiemPerDay,
+          period: "UTC_DAY",
+          resetsAt: "00:00 UTC",
+        },
       },
     });
   });
@@ -386,6 +432,7 @@ export async function buildApp(
   app.get("/openapi.json", (_req, res) => res.json(openApiDocument(config)));
   app.get("/.well-known/agent-card.json", (_req, res) => res.json(agentCard(config)));
   app.get("/llms.txt", (_req, res) => res.type("text/markdown").send(llmsText(config)));
+  app.get("/terms", (_req, res) => res.json(termsDocument(config)));
   app.get("/robots.txt", (_req, res) =>
     res.type("text/plain").send("User-agent: *\nAllow: /\n"),
   );

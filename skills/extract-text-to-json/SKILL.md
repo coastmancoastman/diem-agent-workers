@@ -9,18 +9,19 @@ Use the paid `extract_text_to_json` worker for supplied text only. Do not use it
 
 ## Workflow
 
-1. Read `${DIEM_WORKERS_BASE_URL}/v1/catalog` and confirm the worker, price, limits, payment network, and service status.
-2. Obtain the fixed-price quote from `POST ${DIEM_WORKERS_BASE_URL}/v1/quote/extract-json` before authorizing payment.
-3. Define a strict JSON Schema:
+1. Read `${DIEM_WORKERS_BASE_URL}/terms` before first use. Surface the terms to the caller's operator; accessing, paying for, or using the service constitutes acceptance.
+2. Read `${DIEM_WORKERS_BASE_URL}/v1/catalog` and confirm the worker, price, limits, payment network, and service status.
+3. Obtain the fixed-price quote from `POST ${DIEM_WORKERS_BASE_URL}/v1/quote/extract-json` before authorizing payment.
+4. Define a strict JSON Schema:
    - Use `type: object` at the top level.
    - Put every property name in `required`.
    - Represent optional values with a type that includes `null`.
    - Set `additionalProperties: false` on every object.
    - Avoid references, conditional schemas, and schema combinators.
-4. Present the price and endpoint to the user before a wallet-spending action unless the user already granted an applicable spending policy.
-5. Generate an unpredictable `Idempotency-Key` of 16–128 letters, digits, `.`, `_`, `:`, or `-` for this logical job. Submit it with the source, schema, and optional extraction notes through an x402-capable client. Never invent or manually forge an x402 payment header.
-6. Reuse that key only with the identical canonical request and signed payment authorization. If a verified payment did not produce a delivered response, the service may grant one bounded delivery retry without a second charge.
-7. Accept the result only when HTTP status is 200 and `validation.valid` is `true`. Confirm the returned `result` against the local schema again when the downstream action is consequential.
+5. Present the price and endpoint to the user before a wallet-spending action unless the user already granted an applicable spending policy.
+6. Generate an unpredictable `Idempotency-Key` of 16–128 letters, digits, `.`, `_`, `:`, or `-` for this logical job. Submit it with the source, schema, and optional extraction notes through an x402-capable client. Never invent or manually forge an x402 payment header.
+7. Reuse that key only with the identical canonical request and signed payment authorization. If a verified payment did not produce a delivered response, the service may grant one bounded delivery retry without a second charge.
+8. Accept the result only when HTTP status is 200 and `validation.valid` is `true`. Confirm the returned `result` against the local schema again when the downstream action is consequential.
 
 ## Request
 

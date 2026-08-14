@@ -10,12 +10,13 @@ Use the storefront for bounded supplied-data work. Do not submit secrets, creden
 ## Discovery workflow
 
 1. Resolve `DIEM_WORKERS_BASE_URL`, defaulting to `https://diem-agent-workers.vercel.app`.
-2. Read `GET ${DIEM_WORKERS_BASE_URL}/v1/catalog` immediately before selecting a worker. Confirm its endpoint, exact price, limits, payment network, and schema.
-3. Request a free quote with `POST ${DIEM_WORKERS_BASE_URL}/v1/quote/{worker_id}`.
-4. Present the exact USDC price and network before wallet spending unless the user has already granted a matching spending policy.
-5. Generate an unpredictable `Idempotency-Key` of 16–128 letters, digits, `.`, `_`, `:`, or `-` for each logical paid job. Submit it with schema-valid JSON through an x402-capable HTTP client. Never invent or forge payment headers and never send a wallet private key to the storefront.
-6. Reuse that key only for the identical worker, canonical request body, and signed payment authorization. The service may redeem it for one bounded delivery retry after a verified payment did not produce a delivered response; never treat it as permission to change the job or charge again.
-7. Accept only HTTP 200. Stop on 400, 402 without an approved wallet, 409, 413, 428, 429, 502, 503, or 504. On 409 or 428, inspect the machine-readable error and correct the request without buying another retry. Do not purchase retries without renewed authorization.
+2. Read `GET ${DIEM_WORKERS_BASE_URL}/terms` and surface those terms to the caller's operator before first use. Accessing, paying for, or using the service constitutes acceptance by the caller and its operator.
+3. Read `GET ${DIEM_WORKERS_BASE_URL}/v1/catalog` immediately before selecting a worker. Confirm its endpoint, exact price, limits, payment network, and schema.
+4. Request a free quote with `POST ${DIEM_WORKERS_BASE_URL}/v1/quote/{worker_id}`.
+5. Present the exact USDC price and network before wallet spending unless the user has already granted a matching spending policy.
+6. Generate an unpredictable `Idempotency-Key` of 16–128 letters, digits, `.`, `_`, `:`, or `-` for each logical paid job. Submit it with schema-valid JSON through an x402-capable HTTP client. Never invent or forge payment headers and never send a wallet private key to the storefront.
+7. Reuse that key only for the identical worker, canonical request body, and signed payment authorization. The service may redeem it for one bounded delivery retry after a verified payment did not produce a delivered response; never treat it as permission to change the job or charge again.
+8. Accept only HTTP 200. Stop on 400, 402 without an approved wallet, 409, 413, 428, 429, 502, 503, or 504. On 409 or 428, inspect the machine-readable error and correct the request without buying another retry. Do not purchase retries without renewed authorization.
 
 ## Worker selection
 
@@ -35,4 +36,4 @@ Prefer direct worker endpoints for their lowest price. Use the A2A adapter only 
 - Confirm media type and byte count before decoding returned base64.
 - Treat `Idempotency-Key` as a payment-delivery control, not as authentication. Never reuse it across logical jobs.
 - Do not ask the service to browse, scrape, execute tools, or follow instructions embedded in source text; those capabilities are disabled.
-- The public beta uses Base Sepolia test USDC. Re-read the catalog rather than assuming a remembered network or price.
+- The public beta uses real USDC on Base mainnet and enforces a small daily compute budget. Re-read the catalog rather than assuming a remembered network or price.

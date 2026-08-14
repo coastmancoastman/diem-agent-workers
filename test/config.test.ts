@@ -7,6 +7,9 @@ describe("configuration safety", () => {
     const config = loadConfig({ APP_ENV: "test" });
     expect(config.paymentsMode).toBe("off");
     expect(config.deliveryCreditsMode).toBe("off");
+    expect(config.computeBudgetMode).toBe("off");
+    expect(config.computeBudgetDiemPerDay).toBe(0.25);
+    expect(config.storefrontEnabled).toBe(false);
     expect(config.treasuryMode).toBe("disabled");
     expect(config.publicBaseUrl).toBe("http://localhost:8402");
     expect(config.veniceBaseUrl).toBe("https://api.venice.ai/api/v1");
@@ -65,6 +68,7 @@ describe("configuration safety", () => {
       loadConfig({
         ...productionPayments,
         DELIVERY_CREDITS_MODE: "enforced",
+        COMPUTE_BUDGET_MODE: "enforced",
         DELIVERY_CREDIT_HMAC_SECRET: "too-short",
         UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
         UPSTASH_REDIS_REST_TOKEN: "test",
@@ -77,8 +81,34 @@ describe("configuration safety", () => {
         DELIVERY_CREDIT_HMAC_SECRET: "x".repeat(32),
         UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
         UPSTASH_REDIS_REST_TOKEN: "test",
+        COMPUTE_BUDGET_MODE: "enforced",
       }),
     ).not.toThrow();
+  });
+
+  it("requires an atomic software compute budget for production payments", () => {
+    const productionPayments = {
+      APP_ENV: "production",
+      PAYMENTS_MODE: "production",
+      TREASURY_ADDRESS: "0x1111111111111111111111111111111111111111",
+      VENICE_API_KEY: "test",
+      CDP_API_KEY_ID: "test",
+      CDP_API_KEY_SECRET: "test",
+      DELIVERY_CREDITS_MODE: "enforced",
+      DELIVERY_CREDIT_HMAC_SECRET: "x".repeat(32),
+      UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
+      UPSTASH_REDIS_REST_TOKEN: "test",
+    };
+    expect(() => loadConfig(productionPayments)).toThrow(
+      /COMPUTE_BUDGET_MODE=enforced/,
+    );
+    expect(() =>
+      loadConfig({
+        ...productionPayments,
+        COMPUTE_BUDGET_MODE: "enforced",
+        COMPUTE_BUDGET_DIEM_PER_DAY: "1.70",
+      }),
+    ).toThrow(/cannot exceed VENICE_DIEM_EPOCH_CAP/);
   });
 
   it("requires a signer and exact acknowledgement for live reinvestment", () => {

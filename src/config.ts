@@ -3,6 +3,7 @@ import { TREASURY_LIVE_ACK, VENICE_DEFAULT_BASE_URL } from "./constants.js";
 
 export type PaymentsMode = "off" | "development" | "production";
 export type DeliveryCreditsMode = "off" | "enforced";
+export type ComputeBudgetMode = "off" | "enforced";
 export type TreasuryMode = "disabled" | "quote" | "live";
 export type TreasuryKeychainBackend = "security-cli" | "native-helper";
 
@@ -34,6 +35,17 @@ function numberValue(
     throw new Error(`${name} must be <= ${options.max}`);
   }
   return value;
+}
+
+function booleanValue(
+  name: string,
+  raw: string | undefined,
+  fallback: boolean,
+): boolean {
+  if (raw === undefined || raw === "") return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`${name} must be true or false`);
 }
 
 function optionalAddress(name: string, raw: string | undefined): Address | undefined {
@@ -103,12 +115,15 @@ export interface AppConfig {
   cdpApiKeyId?: string;
   cdpApiKeySecret?: string;
   paymentsMode: PaymentsMode;
+  storefrontEnabled: boolean;
   deliveryCreditsMode: DeliveryCreditsMode;
   deliveryCreditHmacSecret?: string;
   deliveryCreditTtlSeconds: number;
   deliveryCreditLeaseSeconds: number;
   upstashRedisRestUrl?: string;
   upstashRedisRestToken?: string;
+  computeBudgetMode: ComputeBudgetMode;
+  computeBudgetDiemPerDay: number;
   x402PriceUsd: number;
   x402ClassifyPriceUsd: number;
   x402SummarizePriceUsd: number;
@@ -162,6 +177,12 @@ export function loadConfig(
     ["off", "enforced"] as const,
     "off",
   );
+  const computeBudgetMode = enumValue(
+    "COMPUTE_BUDGET_MODE",
+    env.COMPUTE_BUDGET_MODE,
+    ["off", "enforced"] as const,
+    "off",
+  );
   const upstashRedisRestUrlValue =
     env.UPSTASH_REDIS_REST_URL ?? env.KV_REST_API_URL;
   const upstashRedisRestToken =
@@ -211,6 +232,11 @@ export function loadConfig(
     ...(env.CDP_API_KEY_ID ? { cdpApiKeyId: env.CDP_API_KEY_ID } : {}),
     ...(env.CDP_API_KEY_SECRET ? { cdpApiKeySecret: env.CDP_API_KEY_SECRET } : {}),
     paymentsMode,
+    storefrontEnabled: booleanValue(
+      "STOREFRONT_ENABLED",
+      env.STOREFRONT_ENABLED,
+      false,
+    ),
     deliveryCreditsMode,
     ...(env.DELIVERY_CREDIT_HMAC_SECRET
       ? { deliveryCreditHmacSecret: env.DELIVERY_CREDIT_HMAC_SECRET }
@@ -237,6 +263,13 @@ export function loadConfig(
         }
       : {}),
     ...(upstashRedisRestToken ? { upstashRedisRestToken } : {}),
+    computeBudgetMode,
+    computeBudgetDiemPerDay: numberValue(
+      "COMPUTE_BUDGET_DIEM_PER_DAY",
+      env.COMPUTE_BUDGET_DIEM_PER_DAY,
+      0.25,
+      { min: 0.01, max: 1_000 },
+    ),
     x402PriceUsd: numberValue("X402_PRICE_USD", env.X402_PRICE_USD, 0.02, {
       min: 0.001,
       max: 10,
@@ -244,13 +277,13 @@ export function loadConfig(
     x402ClassifyPriceUsd: numberValue(
       "X402_CLASSIFY_PRICE_USD",
       env.X402_CLASSIFY_PRICE_USD,
-      0.005,
+      0.01,
       { min: 0.001, max: 10 },
     ),
     x402SummarizePriceUsd: numberValue(
       "X402_SUMMARIZE_PRICE_USD",
       env.X402_SUMMARIZE_PRICE_USD,
-      0.005,
+      0.02,
       { min: 0.001, max: 10 },
     ),
     x402TtsPriceUsd: numberValue(
@@ -341,6 +374,14 @@ export function validateConfig(config: AppConfig): void {
       "Production payments require DELIVERY_CREDITS_MODE=enforced",
     );
   }
+  if (
+    config.paymentsMode === "production" &&
+    config.computeBudgetMode !== "enforced"
+  ) {
+    throw new Error(
+      "Production payments require COMPUTE_BUDGET_MODE=enforced",
+    );
+  }
   if (config.deliveryCreditsMode === "enforced") {
     if (
       !config.deliveryCreditHmacSecret ||
@@ -353,6 +394,18 @@ export function validateConfig(config: AppConfig): void {
     if (!config.upstashRedisRestUrl || !config.upstashRedisRestToken) {
       throw new Error(
         "Enforced delivery credits require Upstash Redis REST credentials",
+      );
+    }
+  }
+  if (config.computeBudgetMode === "enforced") {
+    if (!config.upstashRedisRestUrl || !config.upstashRedisRestToken) {
+      throw new Error(
+        "Enforced compute budget requires Upstash Redis REST credentials",
+      );
+    }
+    if (config.computeBudgetDiemPerDay > config.veniceDiemEpochCap) {
+      throw new Error(
+        "COMPUTE_BUDGET_DIEM_PER_DAY cannot exceed VENICE_DIEM_EPOCH_CAP",
       );
     }
   }

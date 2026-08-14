@@ -2,6 +2,7 @@ import {
   BASE_CAIP2,
   BASE_SEPOLIA_CAIP2,
   SERVICE_VERSION,
+  TEXT_SOURCE_LIMITS,
   WORKERS,
   type WorkerId,
 } from "./constants.js";
@@ -55,7 +56,7 @@ export const workerContracts: Record<WorkerId, WorkerContract> = {
         source: {
           type: "string",
           minLength: 1,
-          maxLength: 40_000,
+          maxLength: TEXT_SOURCE_LIMITS.extractJson.characters,
           description: "Untrusted source text, treated as data rather than instructions.",
         },
         schema: {
@@ -80,14 +81,23 @@ export const workerContracts: Record<WorkerId, WorkerContract> = {
       provider: { name: "venice", model: "venice-uncensored-1-2" },
       usage: { inputTokens: 200, outputTokens: 35, totalTokens: 235 },
     },
-    limits: { sourceCharacters: 40_000, schemaBytes: 12_000, schemaProperties: 60 },
+    limits: {
+      sourceCharacters: TEXT_SOURCE_LIMITS.extractJson.characters,
+      sourceUtf8Bytes: TEXT_SOURCE_LIMITS.extractJson.utf8Bytes,
+      schemaBytes: 12_000,
+      schemaProperties: 60,
+    },
     tags: ["extraction", "json", "normalization", "structured-output"],
   },
   [WORKERS.classifyText.id]: {
     inputSchema: {
       type: "object",
       properties: {
-        source: { type: "string", minLength: 1, maxLength: 20_000 },
+        source: {
+          type: "string",
+          minLength: 1,
+          maxLength: TEXT_SOURCE_LIMITS.classifyText.characters,
+        },
         labels: {
           type: "array",
           minItems: 2,
@@ -108,14 +118,22 @@ export const workerContracts: Record<WorkerId, WorkerContract> = {
       result: { label: "refund", rationale: "The customer explicitly requests a refund.", confidence: 0.98 },
       validation: { valid: true },
     },
-    limits: { sourceCharacters: 20_000, labels: 12 },
+    limits: {
+      sourceCharacters: TEXT_SOURCE_LIMITS.classifyText.characters,
+      sourceUtf8Bytes: TEXT_SOURCE_LIMITS.classifyText.utf8Bytes,
+      labels: 12,
+    },
     tags: ["classification", "routing", "triage"],
   },
   [WORKERS.summarizeText.id]: {
     inputSchema: {
       type: "object",
       properties: {
-        source: { type: "string", minLength: 1, maxLength: 40_000 },
+        source: {
+          type: "string",
+          minLength: 1,
+          maxLength: TEXT_SOURCE_LIMITS.summarizeText.characters,
+        },
         maxKeyPoints: { type: "integer", minimum: 3, maximum: 10, default: 5 },
       },
       required: ["source"],
@@ -130,7 +148,11 @@ export const workerContracts: Record<WorkerId, WorkerContract> = {
       result: { abstract: "The team reviewed launch timing and risks.", keyPoints: ["Launch owner assigned", "Risk review scheduled"] },
       validation: { valid: true },
     },
-    limits: { sourceCharacters: 40_000, keyPoints: 10 },
+    limits: {
+      sourceCharacters: TEXT_SOURCE_LIMITS.summarizeText.characters,
+      sourceUtf8Bytes: TEXT_SOURCE_LIMITS.summarizeText.utf8Bytes,
+      keyPoints: 10,
+    },
     tags: ["summarization", "abstract", "key-points"],
   },
   [WORKERS.textToSpeech.id]: {
@@ -231,13 +253,20 @@ export function catalog(config: AppConfig) {
       llms: `${config.publicBaseUrl}/llms.txt`,
       agentCard: `${config.publicBaseUrl}/.well-known/agent-card.json`,
       mcp: `${config.publicBaseUrl}/mcp`,
+      terms: `${config.publicBaseUrl}/terms`,
     },
     payment: {
       protocol: "x402",
       mode: config.paymentsMode,
+      enabled: config.storefrontEnabled,
       network: config.paymentsMode === "development" ? BASE_SEPOLIA_CAIP2 : BASE_CAIP2,
       currency: "USDC",
-      prepaymentSafety: ["input_validation", "provider_capacity", "model_availability"],
+      prepaymentSafety: [
+        "input_validation",
+        "provider_capacity",
+        "model_availability",
+        "global_compute_budget",
+      ],
       deliveryProtection: {
         mode: config.deliveryCreditsMode,
         header: "Idempotency-Key",
@@ -246,12 +275,22 @@ export function catalog(config: AppConfig) {
       },
     },
     computeBudget: {
-      provider: "venice",
-      currency: "DIEM",
-      cap: config.veniceDiemEpochCap,
-      period: "EPOCH",
-      resetsAt: "00:00 UTC",
-      enforcement: "provider_api_key",
+      provider: {
+        name: "venice",
+        currency: "DIEM",
+        cap: config.veniceDiemEpochCap,
+        period: "EPOCH",
+        resetsAt: "00:00 UTC",
+        enforcement: "provider_api_key",
+      },
+      software: {
+        mode: config.computeBudgetMode,
+        currency: "DIEM",
+        cap: config.computeBudgetDiemPerDay,
+        period: "UTC_DAY",
+        resetsAt: "00:00 UTC",
+        enforcement: "atomic_upstash_reservation_before_inference",
+      },
     },
     workers: Object.values(WORKERS).map((worker) => {
       const contract = workerContracts[worker.id];
@@ -295,6 +334,10 @@ export function agentCard(config: AppConfig) {
     ],
     version: SERVICE_VERSION,
     documentationUrl: `${config.publicBaseUrl}/openapi.json`,
+    provider: {
+      organization: "DIEM Agent Workers project",
+      url: `${config.publicBaseUrl}/terms`,
+    },
     capabilities: { streaming: false, pushNotifications: false, extendedAgentCard: false },
     defaultInputModes: ["application/json", "text/plain", "audio/wav"],
     defaultOutputModes: ["application/json", "audio/mpeg", "image/webp"],
@@ -399,6 +442,7 @@ export function openApiDocument(config: AppConfig) {
       title: "DIEM Agent Workers API",
       version: SERVICE_VERSION,
       description: "Machine-first x402 micro-workers powered by private Venice models. Not affiliated with or endorsed by Venice.ai.",
+      termsOfService: `${config.publicBaseUrl}/terms`,
     },
     servers: [{ url: config.publicBaseUrl }],
     paths,
@@ -409,5 +453,5 @@ export function llmsText(config: AppConfig): string {
   const workers = Object.values(WORKERS)
     .map((worker) => `## ${worker.id}\n\n${worker.description}\n\n- Endpoint: POST ${config.publicBaseUrl}${worker.path}\n- Free quote: POST ${config.publicBaseUrl}/v1/quote/${worker.id}\n- Price: $${workerPrice(config, worker.id).toFixed(3)} USDC\n- Tags: ${workerContracts[worker.id].tags.join(", ")}`)
     .join("\n\n");
-  return `# DIEM Agent Workers\n\n> Bounded micro-workers for autonomous software agents, paid with USDC through x402 and powered by private Venice models.\n\n## Discovery\n\n- [Catalog](${config.publicBaseUrl}/v1/catalog)\n- [Well-known catalog](${config.publicBaseUrl}/.well-known/agent-catalog.json)\n- [OpenAPI](${config.publicBaseUrl}/openapi.json)\n- [A2A Agent Card](${config.publicBaseUrl}/.well-known/agent-card.json)\n- [MCP Streamable HTTP server](${config.publicBaseUrl}/mcp)\n- [Health](${config.publicBaseUrl}/health)\n\nEvery job is input-validated and provider-capacity-checked before payment. When delivery protection is enforced, signed paid attempts must carry an unpredictable Idempotency-Key and interrupted deliveries receive one matching retry. Only HMAC fingerprints and state are persisted; request and provider bodies are not logged or persisted. Web search and scraping are disabled.\n\n${workers}\n\nVenice compute cap: ${config.veniceDiemEpochCap.toFixed(2)} DIEM per EPOCH, reset at 00:00 UTC and enforced by the provider API key. Revenue policy: settled USDC is eligible only for conversion to the official Venice DIEM token on Base; conversion and staking remain disabled unless separately authorized.\n`;
+  return `# DIEM Agent Workers\n\n> Bounded micro-workers for autonomous software agents, paid with USDC through x402 and powered by private Venice models.\n\n## Discovery\n\n- [Catalog](${config.publicBaseUrl}/v1/catalog)\n- [Well-known catalog](${config.publicBaseUrl}/.well-known/agent-catalog.json)\n- [OpenAPI](${config.publicBaseUrl}/openapi.json)\n- [A2A Agent Card](${config.publicBaseUrl}/.well-known/agent-card.json)\n- [MCP Streamable HTTP server](${config.publicBaseUrl}/mcp)\n- [Health](${config.publicBaseUrl}/health)\n- [Terms](${config.publicBaseUrl}/terms)\n\nAccessing, paying for, or using the service constitutes acceptance of the published terms by the caller and its operator. Every job is input-validated, provider-capacity-checked, and atomically reserved against a global compute budget before inference. When delivery protection is enforced, signed paid attempts must carry an unpredictable Idempotency-Key and interrupted deliveries receive one matching retry. Only HMAC fingerprints and aggregate state are persisted; request and provider bodies are not logged or persisted. Web search and scraping are disabled.\n\n${workers}\n\nSoftware compute cap: ${config.computeBudgetDiemPerDay.toFixed(2)} DIEM per UTC day. Provider backstop: ${config.veniceDiemEpochCap.toFixed(2)} DIEM per EPOCH, reset at 00:00 UTC. Revenue policy: settled USDC is eligible only for conversion to the official Venice DIEM token on Base; conversion and staking remain disabled unless separately authorized.\n`;
 }

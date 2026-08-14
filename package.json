@@ -1,6 +1,6 @@
 {
   "name": "diem-agent-workers",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.19.0",
@@ -22,6 +22,7 @@
     "test": "vitest run",
     "test:sepolia": "tsx scripts/test-sepolia-x402.ts",
     "test:sepolia:all": "tsx scripts/test-sepolia-all-workers.ts",
+    "test:mainnet": "tsx scripts/test-mainnet-x402.ts",
     "eval:text": "tsx scripts/evaluate-text-models.ts",
     "smoke:media": "tsx scripts/smoke-media-workers.ts",
     "test:watch": "vitest",

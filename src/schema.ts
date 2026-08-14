@@ -1,5 +1,6 @@
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
+import { TEXT_SOURCE_LIMITS } from "./constants.js";
 
 export type JsonSchema = Record<string, unknown>;
 
@@ -156,8 +157,11 @@ export function parseExtractJsonInput(value: unknown): ExtractJsonInput {
   if (typeof value.source !== "string" || value.source.trim().length === 0) {
     throw new InputError("source must be a non-empty string");
   }
-  if (value.source.length > 40_000) {
+  if (value.source.length > TEXT_SOURCE_LIMITS.extractJson.characters) {
     throw new InputError("source exceeds 40,000 characters");
+  }
+  if (Buffer.byteLength(value.source, "utf8") > TEXT_SOURCE_LIMITS.extractJson.utf8Bytes) {
+    throw new InputError("source exceeds 48,000 UTF-8 bytes");
   }
   if (value.instructions !== undefined) {
     if (typeof value.instructions !== "string") {
@@ -186,7 +190,12 @@ export function parseClassifyTextInput(value: unknown): ClassifyTextInput {
   if (typeof value.source !== "string" || value.source.trim().length === 0) {
     throw new InputError("source must be a non-empty string");
   }
-  if (value.source.length > 20_000) throw new InputError("source exceeds 20,000 characters");
+  if (value.source.length > TEXT_SOURCE_LIMITS.classifyText.characters) {
+    throw new InputError("source exceeds 20,000 characters");
+  }
+  if (Buffer.byteLength(value.source, "utf8") > TEXT_SOURCE_LIMITS.classifyText.utf8Bytes) {
+    throw new InputError("source exceeds 24,000 UTF-8 bytes");
+  }
   if (!Array.isArray(value.labels) || value.labels.length < 2 || value.labels.length > 12) {
     throw new InputError("labels must contain between 2 and 12 strings");
   }
@@ -211,7 +220,12 @@ export function parseSummarizeTextInput(value: unknown): SummarizeTextInput {
   if (typeof value.source !== "string" || value.source.trim().length === 0) {
     throw new InputError("source must be a non-empty string");
   }
-  if (value.source.length > 40_000) throw new InputError("source exceeds 40,000 characters");
+  if (value.source.length > TEXT_SOURCE_LIMITS.summarizeText.characters) {
+    throw new InputError("source exceeds 40,000 characters");
+  }
+  if (Buffer.byteLength(value.source, "utf8") > TEXT_SOURCE_LIMITS.summarizeText.utf8Bytes) {
+    throw new InputError("source exceeds 48,000 UTF-8 bytes");
+  }
   const maxKeyPoints = value.maxKeyPoints ?? 5;
   if (!Number.isInteger(maxKeyPoints) || Number(maxKeyPoints) < 3 || Number(maxKeyPoints) > 10) {
     throw new InputError("maxKeyPoints must be an integer from 3 through 10");

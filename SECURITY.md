@@ -20,7 +20,7 @@ Operational telemetry is rebuilt from an explicit field allowlist. Never add pro
 
 Every paid route parses and validates its request before x402 middleware. When payments are enabled, the route also verifies current Venice epoch access and that the exact configured model is online, private, and capability-compatible before returning payment instructions. Successful readiness is cached for at most 15 seconds and concurrent refreshes are coalesced.
 
-That preflight materially reduces paid provider failures but cannot eliminate a race between readiness, settlement, and inference. Base mainnet must remain disabled until the service has durable capacity reservations plus a buyer-credit or refund policy for a paid call that fails after settlement. Base Sepolia assets have no monetary value.
+That preflight materially reduces paid provider failures but cannot eliminate a race between readiness, settlement, and inference. Base mainnet therefore requires both durable one-retry buyer credits and an atomic Upstash-backed daily compute reservation before inference. The software budget must not exceed the native Venice key cap; storage failure is fail-closed. `STOREFRONT_ENABLED` remains an independent pre-payment kill switch, and automatic treasury execution stays disabled during the mainnet beta.
 
 The MCP server never requests or receives buyer private keys. A2A and MCP inputs are subject to the same worker parsers as direct calls.
 

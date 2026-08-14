@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { WORKERS } from "../src/constants.js";
+import { MemoryComputeBudgetStore } from "../src/compute-budget-store.js";
 import {
   MemoryDeliveryCreditStore,
   type DeliveryCreditContext,
@@ -27,6 +28,7 @@ const context = (
   paymentFingerprint: "b".repeat(64),
   requestFingerprint: "c".repeat(64),
   worker: WORKERS.extractJson.id,
+  reservedDiem: 0.02,
   ...overrides,
 });
 
@@ -46,6 +48,7 @@ function fakeStore(
     markDelivered: vi.fn(async () => undefined),
     cancelVerified: vi.fn(async () => undefined),
     releaseRetry: vi.fn(async () => undefined),
+    deferRetry: vi.fn(async () => undefined),
   };
 }
 
@@ -146,6 +149,26 @@ describe("durable delivery credits", () => {
       .send({ source: "safe", schema: { type: "object" } })
       .expect(503);
     expect(response.body.error).toBe("delivery_credit_protection_unavailable");
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("defers a delivery retry when the global compute budget is exhausted", async () => {
+    const handler = vi.fn((_req, res) => res.json({ ok: true }));
+    const store = fakeStore(async () => "retry");
+    const budget = new MemoryComputeBudgetStore(0.01);
+    const app = express();
+    app.use(express.json());
+    app.use(deliveryCreditMiddleware(config, store, telemetry, budget));
+    app.post(WORKERS.extractJson.path, handler);
+
+    const response = await request(app)
+      .post(WORKERS.extractJson.path)
+      .set("payment-signature", paymentHeader)
+      .set("idempotency-key", "agent-request-budget-stop")
+      .send({ source: "safe", schema: { type: "object" } })
+      .expect(503);
+    expect(response.body.error).toBe("compute_budget_exhausted");
+    expect(store.deferRetry).toHaveBeenCalledOnce();
     expect(handler).not.toHaveBeenCalled();
   });
 
