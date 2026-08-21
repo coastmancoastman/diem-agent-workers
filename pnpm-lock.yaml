@@ -33,8 +33,8 @@ importers:
         specifier: ^2.22.0
         version: 2.22.0(typescript@5.9.3)
       '@x402/fetch':
-        specifier: 2.22.0
-        version: 2.22.0
+        specifier: 2.23.0
+        version: 2.23.0
       '@x402/svm':
         specifier: ^2.22.0
         version: 2.22.0(@solana/kit@5.5.1(typescript@5.9.3))(@solana/sysvars@5.5.1(typescript@5.9.3))
@@ -882,6 +882,9 @@ packages:
   '@x402/core@2.22.0':
     resolution: {integrity: sha512-hYySs/PvukqRipC2mKqrsn/jx2U/p5EGnN3clQ2CIcApwtoFuG77CqpC3Wy7Fdp/juW8t8quiPVnqGuIkfix1Q==}
 
+  '@x402/core@2.23.0':
+    resolution: {integrity: sha512-EFeV0nXbTPPe5FXaD6y9vMgqc+k/ujLXCrUPrQXkmHjHyjC3Ir5tTL1e2FPSkx2+GUGzfpt1wVZb36639ygkWw==}
+
   '@x402/evm@2.22.0':
     resolution: {integrity: sha512-WzZVGVx6B2cvCAEHDCuNWfQkcwIZsOVdGcJKILmG/ySzLpBZ1/ARU2kU/8K3ekxhygAKrkarltVVznSEoO5vdQ==}
 
@@ -897,8 +900,8 @@ packages:
   '@x402/extensions@2.22.0':
     resolution: {integrity: sha512-E5Ma1Fs1GwO/ET7KtGUI7dPuVFoINR+mwTWVoGdNi3DsJBJKDWSA7Ta7bDgSANzV3XCAMK9gvz/VSItZliApMA==}
 
-  '@x402/fetch@2.22.0':
-    resolution: {integrity: sha512-+uMCPGXw1h7YGjS778YnwUi7YvZ5Ny8XeFjBL8TvQuy9T+j8O5x/zDQu9nyNaOa/OppTqVh+CkpW+xs17ePyXg==}
+  '@x402/fetch@2.23.0':
+    resolution: {integrity: sha512-iyUfmnX6eAQa+GxyhC2M/vDP49EuoB/KHCXeOAFJgfL9lhtsyomLfYAMZlF+0xYHgpk/G96QZSp8iyhVlems/A==}
 
   '@x402/svm@2.22.0':
     resolution: {integrity: sha512-io8JqfZncn9BonlcrVjsuLp8nhIwc97qY7ceI6gLxztxuEb2J37nNqbAOU9Z2u/2eQc/nrJCyGirfZcFL6JGeA==}
@@ -2541,6 +2544,10 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
+  '@x402/core@2.23.0':
+    dependencies:
+      zod: 3.25.76
+
   '@x402/evm@2.22.0(typescript@5.9.3)':
     dependencies:
       '@x402/core': 2.22.0
@@ -2579,9 +2586,9 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@x402/fetch@2.22.0':
+  '@x402/fetch@2.23.0':
     dependencies:
-      '@x402/core': 2.22.0
+      '@x402/core': 2.23.0
 
   '@x402/svm@2.22.0(@solana/kit@5.5.1(typescript@5.9.3))(@solana/sysvars@5.5.1(typescript@5.9.3))':
     dependencies:
