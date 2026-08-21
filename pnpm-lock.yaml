@@ -13,7 +13,7 @@ importers:
     dependencies:
       '@coinbase/cdp-sdk':
         specifier: ^1.55.0
-        version: 1.55.0(@x402/core@2.22.0)(@x402/evm@2.22.0(typescript@5.9.3))(@x402/extensions@2.22.0(typescript@5.9.3))(@x402/svm@2.22.0(@solana/kit@5.5.1(typescript@5.9.3))(@solana/sysvars@5.5.1(typescript@5.9.3)))(debug@4.4.3)(typescript@5.9.3)
+        version: 1.55.0(@x402/core@2.22.0)(@x402/evm@2.22.0(typescript@5.9.3))(@x402/extensions@2.23.0(typescript@5.9.3))(@x402/svm@2.22.0(@solana/kit@5.5.1(typescript@5.9.3))(@solana/sysvars@5.5.1(typescript@5.9.3)))(debug@4.4.3)(typescript@5.9.3)
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -30,8 +30,8 @@ importers:
         specifier: ^2.22.0
         version: 2.22.0(express@5.2.1)(typescript@5.9.3)
       '@x402/extensions':
-        specifier: ^2.22.0
-        version: 2.22.0(typescript@5.9.3)
+        specifier: ^2.23.0
+        version: 2.23.0(typescript@5.9.3)
       '@x402/fetch':
         specifier: 2.22.0
         version: 2.22.0
@@ -882,6 +882,9 @@ packages:
   '@x402/core@2.22.0':
     resolution: {integrity: sha512-hYySs/PvukqRipC2mKqrsn/jx2U/p5EGnN3clQ2CIcApwtoFuG77CqpC3Wy7Fdp/juW8t8quiPVnqGuIkfix1Q==}
 
+  '@x402/core@2.23.0':
+    resolution: {integrity: sha512-EFeV0nXbTPPe5FXaD6y9vMgqc+k/ujLXCrUPrQXkmHjHyjC3Ir5tTL1e2FPSkx2+GUGzfpt1wVZb36639ygkWw==}
+
   '@x402/evm@2.22.0':
     resolution: {integrity: sha512-WzZVGVx6B2cvCAEHDCuNWfQkcwIZsOVdGcJKILmG/ySzLpBZ1/ARU2kU/8K3ekxhygAKrkarltVVznSEoO5vdQ==}
 
@@ -896,6 +899,9 @@ packages:
 
   '@x402/extensions@2.22.0':
     resolution: {integrity: sha512-E5Ma1Fs1GwO/ET7KtGUI7dPuVFoINR+mwTWVoGdNi3DsJBJKDWSA7Ta7bDgSANzV3XCAMK9gvz/VSItZliApMA==}
+
+  '@x402/extensions@2.23.0':
+    resolution: {integrity: sha512-K0hDWGNrQ5iU8CdDzM8RpYrMusfqs2rgZJbCfUnFXG61TjgFIYYyLExaP8jJ4y2ac0SGXYZC1MI+uJA6YP3TTw==}
 
   '@x402/fetch@2.22.0':
     resolution: {integrity: sha512-+uMCPGXw1h7YGjS778YnwUi7YvZ5Ny8XeFjBL8TvQuy9T+j8O5x/zDQu9nyNaOa/OppTqVh+CkpW+xs17ePyXg==}
@@ -1628,6 +1634,14 @@ packages:
       typescript:
         optional: true
 
+  viem@2.55.18:
+    resolution: {integrity: sha512-7XJtcMueFo4dQz+VK5mhY3GV9lvQkyrMbM/P/IghE0d8oZ/xbhgMXdTpc+ra4ZtDOGsLKu+0/EOD7BetVmVBsw==}
+    peerDependencies:
+      typescript: '>=5.0.4'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   vite@8.2.1:
     resolution: {integrity: sha512-EU/eS7BH3XROHh2YnBefjM6DBKA6ZeMZEYQbj7NLWg5wHYlhB8B/Mayd5XsgWq+NFYccDOTemRpdETWR6Ka/lw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1764,7 +1778,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@coinbase/cdp-sdk@1.55.0(@x402/core@2.22.0)(@x402/evm@2.22.0(typescript@5.9.3))(@x402/extensions@2.22.0(typescript@5.9.3))(@x402/svm@2.22.0(@solana/kit@5.5.1(typescript@5.9.3))(@solana/sysvars@5.5.1(typescript@5.9.3)))(debug@4.4.3)(typescript@5.9.3)':
+  '@coinbase/cdp-sdk@1.55.0(@x402/core@2.22.0)(@x402/evm@2.22.0(typescript@5.9.3))(@x402/extensions@2.23.0(typescript@5.9.3))(@x402/svm@2.22.0(@solana/kit@5.5.1(typescript@5.9.3))(@solana/sysvars@5.5.1(typescript@5.9.3)))(debug@4.4.3)(typescript@5.9.3)':
     dependencies:
       '@solana-program/system': 0.10.0(@solana/kit@5.5.1(typescript@5.9.3))
       '@solana-program/token': 0.9.0(@solana/kit@5.5.1(typescript@5.9.3))
@@ -1781,7 +1795,7 @@ snapshots:
     optionalDependencies:
       '@x402/core': 2.22.0
       '@x402/evm': 2.22.0(typescript@5.9.3)
-      '@x402/extensions': 2.22.0(typescript@5.9.3)
+      '@x402/extensions': 2.23.0(typescript@5.9.3)
       '@x402/svm': 2.22.0(@solana/kit@5.5.1(typescript@5.9.3))(@solana/sysvars@5.5.1(typescript@5.9.3))
     transitivePeerDependencies:
       - bufferutil
@@ -1982,6 +1996,12 @@ snapshots:
       '@signinwithethereum/siwe-parser': 4.2.0
     optionalDependencies:
       viem: 2.55.13(typescript@5.9.3)(zod@4.4.3)
+
+  '@signinwithethereum/siwe@4.2.0(viem@2.55.18(typescript@5.9.3)(zod@3.25.76))':
+    dependencies:
+      '@signinwithethereum/siwe-parser': 4.2.0
+    optionalDependencies:
+      viem: 2.55.18(typescript@5.9.3)(zod@3.25.76)
 
   '@solana-program/compute-budget@0.11.0(@solana/kit@5.5.1(typescript@5.9.3))':
     dependencies:
@@ -2541,6 +2561,10 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
+  '@x402/core@2.23.0':
+    dependencies:
+      zod: 3.25.76
+
   '@x402/evm@2.22.0(typescript@5.9.3)':
     dependencies:
       '@x402/core': 2.22.0
@@ -2572,6 +2596,23 @@ snapshots:
       jose: 5.10.0
       tweetnacl: 1.0.3
       viem: 2.55.13(typescript@5.9.3)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - ethers
+      - typescript
+      - utf-8-validate
+
+  '@x402/extensions@2.23.0(typescript@5.9.3)':
+    dependencies:
+      '@noble/curves': 1.9.7
+      '@scure/base': 1.2.6
+      '@signinwithethereum/siwe': 4.2.0(viem@2.55.18(typescript@5.9.3)(zod@3.25.76))
+      '@x402/core': 2.23.0
+      ajv: 8.20.0
+      jose: 5.10.0
+      tweetnacl: 1.0.3
+      viem: 2.55.18(typescript@5.9.3)(zod@3.25.76)
       zod: 3.25.76
     transitivePeerDependencies:
       - bufferutil
@@ -3349,6 +3390,23 @@ snapshots:
       abitype: 1.2.3(typescript@5.9.3)(zod@4.4.3)
       isows: 1.0.7(ws@8.21.0)
       ox: 0.14.33(typescript@5.9.3)(zod@4.4.3)
+      ws: 8.21.0
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+      - zod
+
+  viem@2.55.18(typescript@5.9.3)(zod@3.25.76):
+    dependencies:
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.2.3(typescript@5.9.3)(zod@3.25.76)
+      isows: 1.0.7(ws@8.21.0)
+      ox: 0.14.33(typescript@5.9.3)(zod@3.25.76)
       ws: 8.21.0
     optionalDependencies:
       typescript: 5.9.3
