@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@upstash/redis": "1.38.2",
     "@x402/core": "^2.22.0",
     "@x402/evm": "^2.22.0",
